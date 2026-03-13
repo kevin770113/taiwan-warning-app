@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+// 引入 Framer Motion 動畫庫
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   CheckCircle2, Circle, FileText, Droplet, 
   BriefcaseMedical, Wrench, Shirt, AlertCircle,
@@ -93,8 +95,6 @@ export default function PreparednessPage() {
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [isMounted, setIsMounted] = useState(false);
   const [mode, setMode] = useState<"basic" | "proactive">("basic");
-  
-  // 新增：監聽畫面是否往下滑動的狀態
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -104,13 +104,9 @@ export default function PreparednessPage() {
       try { setCheckedItems(JSON.parse(saved)); } catch (e) { console.error(e); }
     }
 
-    // 註冊滾動監聽器
     const handleScroll = () => {
-      if (window.scrollY > 30) {
-        setIsScrolled(true);
-      } else {
-        setIsScrolled(false);
-      }
+      // 只要往下超過 40px 就觸發收合
+      setIsScrolled(window.scrollY > 40);
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
@@ -138,12 +134,11 @@ export default function PreparednessPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-24 relative">
       
-      {/* 1. 非吸頂區塊 (往下滑會自然消失釋放空間) */}
+      {/* 1. 非吸頂區塊 (往下滑會自然消失) */}
       <div className="pt-6 px-5 mb-2">
         <h1 className="text-2xl font-bold text-slate-800 tracking-tight">防災準備</h1>
         <p className="text-sm text-slate-500 mt-1 mb-4">急難救助包檢核表</p>
 
-        {/* 目標用途差異說明 */}
         <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl shadow-sm">
           <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
           <p className="text-[13px] text-slate-600 leading-relaxed">
@@ -154,14 +149,16 @@ export default function PreparednessPage() {
         </div>
       </div>
 
-      {/* 2. 吸頂動態變形區塊 (Sticky Header) */}
-      <div className={`sticky top-0 z-20 px-5 transition-all duration-300 ease-in-out ${
-        isScrolled 
-          ? "pt-3 pb-3 bg-white/85 backdrop-blur-md shadow-sm border-b border-slate-200/50" 
-          : "pt-1 pb-3 bg-[#f8fafc] border-b border-transparent"
-      }`}>
-        
-        {/* 雙模式切換開關 */}
+      {/* 2. 吸頂動態變形區塊 (使用 Framer Motion 硬體加速) */}
+      <motion.div 
+        layout
+        className={`sticky top-0 z-20 px-5 transition-colors duration-300 ${
+          isScrolled 
+            ? "pt-3 pb-3 bg-white/90 backdrop-blur-md shadow-sm border-b border-slate-200/50" 
+            : "pt-1 pb-2 bg-[#f8fafc] border-transparent"
+        }`}
+      >
+        {/* 切換開關 */}
         <div className="flex bg-slate-200/60 p-1 rounded-xl shadow-inner">
           <button
             onClick={() => setMode("basic")}
@@ -181,52 +178,66 @@ export default function PreparednessPage() {
           </button>
         </div>
 
-        {/* 動態壓縮的進度條卡片 */}
-        <div className={`w-full transition-all duration-300 ease-in-out transform-gpu overflow-hidden flex flex-col justify-center ${
-          isScrolled
-            ? "bg-transparent border-transparent shadow-none px-1 py-0 mt-3 mb-0 rounded-none" // 壓縮狀態
-            : "bg-white border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4 mt-4 mb-0 rounded-2xl border" // 展開狀態
-        }`}>
-          
-          {/* 頂部文字區 (往下滑會折疊消失) */}
-          <div className={`flex justify-between items-end transition-all duration-300 ease-in-out overflow-hidden ${
-            isScrolled ? "opacity-0 max-h-0 m-0" : "opacity-100 max-h-10 mb-2"
-          }`}>
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-              {mode === "basic" ? "基本準備進度" : "積極準備進度"}
-            </span>
-            <span className={`text-xl font-black transition-colors ${mode === "basic" ? "text-teal-600" : "text-amber-500"}`}>
-              {progressPercent}%
-            </span>
-          </div>
+        {/* 進度條容器：使用 layout 屬性自動處理 padding/margin 變化 */}
+        <motion.div 
+          layout
+          className={`w-full overflow-hidden ${
+            isScrolled
+              ? "bg-transparent border-transparent shadow-none px-1 mt-3" 
+              : "bg-white border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4 mt-4 rounded-2xl" 
+          }`}
+        >
+          {/* 頂部文字區塊：使用 AnimatePresence 處理平滑消失與出現 */}
+          <AnimatePresence>
+            {!isScrolled && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex justify-between items-end mb-2"
+              >
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                  {mode === "basic" ? "基本準備進度" : "積極準備進度"}
+                </span>
+                <span className={`text-xl font-black ${mode === "basic" ? "text-teal-600" : "text-amber-500"}`}>
+                  {progressPercent}%
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* 實體進度條 (平滑變細) */}
-          <div className={`w-full bg-slate-100 overflow-hidden transition-all duration-300 ease-in-out ${
-            isScrolled ? "h-1 rounded-full bg-slate-200/80" : "h-2.5 rounded-full"
-          }`}>
-            <div 
-              className={`transition-all duration-700 ease-out ${
-                isScrolled
-                  ? (mode === "basic" ? "bg-teal-500 h-1 rounded-full" : "bg-amber-500 h-1 rounded-full")
-                  : (mode === "basic" ? "bg-teal-500 h-2.5 rounded-full" : "bg-amber-500 h-2.5 rounded-full")
-              }`}
+          {/* 進度條本體 */}
+          <motion.div layout className={`w-full bg-slate-100 rounded-full overflow-hidden ${isScrolled ? "h-1" : "h-2.5"}`}>
+            <motion.div 
+              layout
+              className={`rounded-full transition-all duration-700 ease-out ${
+                mode === "basic" ? "bg-teal-500" : "bg-amber-500"
+              } ${isScrolled ? "h-1" : "h-2.5"}`}
               style={{ width: `${progressPercent}%` }}
-            ></div>
-          </div>
+            ></motion.div>
+          </motion.div>
           
-          {/* 底部文字區 (往下滑會折疊消失) */}
-          <div className={`text-right transition-all duration-300 ease-in-out overflow-hidden ${
-            isScrolled ? "opacity-0 max-h-0 m-0" : "opacity-100 max-h-10 mt-2"
-          }`}>
-            <p className="text-[11px] font-medium text-slate-400">
-              已完成 {completedItems} / {totalItems} 項
-            </p>
-          </div>
+          {/* 底部文字區塊 */}
+          <AnimatePresence>
+            {!isScrolled && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="mt-2 text-right"
+              >
+                <p className="text-[11px] font-medium text-slate-400">
+                  已完成 {completedItems} / {totalItems} 項
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </motion.div>
 
-        </div>
-      </div>
-
-      {/* 3. 清單內容區域 (往下滾動的本體) */}
+      {/* 3. 清單內容區域 */}
       <main className="px-5 pt-3 pb-5 space-y-5">
         {checklistData.map((category) => {
           const CategoryIcon = category.icon;
@@ -277,7 +288,6 @@ export default function PreparednessPage() {
           );
         })}
 
-        {/* 底部溫馨提示 */}
         <section className="bg-slate-800 border border-slate-700 rounded-2xl p-4 flex gap-3 items-start shadow-md mt-4">
           <AlertCircle className="text-slate-300 shrink-0 mt-0.5" size={18} />
           <div>
