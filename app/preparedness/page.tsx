@@ -7,13 +7,12 @@ import {
   Backpack, ShieldAlert, Info
 } from "lucide-react";
 
-// --- 急難救助包清單資料 (包含基本與積極型標籤) ---
+// --- 急難救助包清單資料 (維持不變) ---
 const checklistData = [
   {
     categoryId: "docs",
     title: "重要證件與財務",
     icon: FileText,
-    // 卡片整體的低調淡色背景
     theme: { bg: "bg-blue-50/50", border: "border-blue-100/80", iconBg: "bg-blue-100/80", iconText: "text-blue-600" },
     items: [
       { id: "id_card", label: "身分證、健保卡、駕照 (正本或雙面影本)", isAdvanced: false },
@@ -94,21 +93,29 @@ export default function PreparednessPage() {
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [isMounted, setIsMounted] = useState(false);
   const [mode, setMode] = useState<"basic" | "proactive">("basic");
+  
+  // 新增：監聽畫面是否往下滑動的狀態
+  const [isScrolled, setIsScrolled] = useState(false);
 
-  // 讀取 LocalStorage
   useEffect(() => {
     setIsMounted(true);
     const saved = localStorage.getItem("emergency_kit_progress");
     if (saved) {
-      try {
-        setCheckedItems(JSON.parse(saved));
-      } catch (e) {
-        console.error("讀取進度失敗", e);
-      }
+      try { setCheckedItems(JSON.parse(saved)); } catch (e) { console.error(e); }
     }
+
+    // 註冊滾動監聽器
+    const handleScroll = () => {
+      if (window.scrollY > 30) {
+        setIsScrolled(true);
+      } else {
+        setIsScrolled(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // 存入 LocalStorage
   useEffect(() => {
     if (isMounted) {
       localStorage.setItem("emergency_kit_progress", JSON.stringify(checkedItems));
@@ -119,7 +126,6 @@ export default function PreparednessPage() {
     setCheckedItems(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // 動態計算當前模式的進度
   const currentItems = checklistData.flatMap(cat => 
     cat.items.filter(item => mode === "proactive" || !item.isAdvanced)
   );
@@ -127,94 +133,114 @@ export default function PreparednessPage() {
   const completedItems = currentItems.filter(item => checkedItems[item.id]).length;
   const progressPercent = totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100);
 
-  if (!isMounted) {
-    return <div className="min-h-screen bg-[#f8fafc] animate-pulse"></div>;
-  }
+  if (!isMounted) return <div className="min-h-screen bg-[#f8fafc] animate-pulse"></div>;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans pb-24">
-      {/* 頂部 Header 與動態進度條 (吸頂) */}
-      <header className="pt-5 px-5 pb-5 bg-white border-b border-slate-100 sticky top-0 z-10 shadow-sm">
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">防災準備</h1>
-          <p className="text-sm text-slate-500 mt-1">急難救助包檢核表</p>
-        </div>
+    <div className="min-h-screen bg-[#f8fafc] font-sans pb-24 relative">
+      
+      {/* 1. 非吸頂區塊 (往下滑會自然消失釋放空間) */}
+      <div className="pt-6 px-5 mb-2">
+        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">防災準備</h1>
+        <p className="text-sm text-slate-500 mt-1 mb-4">急難救助包檢核表</p>
 
+        {/* 目標用途差異說明 */}
+        <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl shadow-sm">
+          <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
+          <p className="text-[13px] text-slate-600 leading-relaxed">
+            {mode === "basic" 
+              ? "目標：應對突發狀況，能於 3 分鐘內攜帶逃生的「避難逃生包 (Go-Bag)」，以維持 3 天基礎生存為原則。"
+              : "目標：應對長期斷網斷電、封鎖或居家「就地掩蔽」，以維持 1~2 週生存與較高自救能力為原則。"}
+          </p>
+        </div>
+      </div>
+
+      {/* 2. 吸頂動態變形區塊 (Sticky Header) */}
+      <div className={`sticky top-0 z-20 px-5 transition-all duration-300 ease-in-out ${
+        isScrolled 
+          ? "pt-3 pb-3 bg-white/85 backdrop-blur-md shadow-sm border-b border-slate-200/50" 
+          : "pt-1 pb-3 bg-[#f8fafc] border-b border-transparent"
+      }`}>
+        
         {/* 雙模式切換開關 */}
-        <div className="flex bg-slate-100/80 p-1 rounded-xl mb-4 shadow-inner">
+        <div className="flex bg-slate-200/60 p-1 rounded-xl shadow-inner">
           <button
             onClick={() => setMode("basic")}
             className={`flex-1 flex justify-center items-center gap-2 py-2 text-sm font-bold rounded-lg transition-all ${
-              mode === "basic" ? "bg-white text-teal-700 shadow-sm" : "text-slate-400 hover:text-slate-600"
+              mode === "basic" ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            <Backpack size={16} /> 基本避難 (3天)
+            <Backpack size={16} /> 基本避難
           </button>
           <button
             onClick={() => setMode("proactive")}
             className={`flex-1 flex justify-center items-center gap-2 py-2 text-sm font-bold rounded-lg transition-all ${
-              mode === "proactive" ? "bg-white text-amber-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+              mode === "proactive" ? "bg-white text-amber-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            <ShieldAlert size={16} /> 積極防備 (7天+)
+            <ShieldAlert size={16} /> 積極防備
           </button>
         </div>
 
-        {/* 目標用途差異說明 (依據模式動態切換) */}
-        <div className="mb-4 flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
-          <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
-          <p className="text-xs text-slate-600 leading-relaxed">
-            {mode === "basic" 
-              ? "目標：應對突發狀況，能於 3 分鐘內攜帶逃生的「避難逃生包 (Go-Bag)」，以維持 3 天基礎生存為原則。"
-              : "目標：應對長期斷網斷電、封鎖或居家「就地掩蔽 (Shelter-in-place)」，以維持 1~2 週生存與較高自救能力為原則。"}
-          </p>
-        </div>
-
-        {/* 進度條區塊 */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-          <div className="flex justify-between items-end mb-2">
+        {/* 動態壓縮的進度條卡片 */}
+        <div className={`w-full transition-all duration-300 ease-in-out transform-gpu overflow-hidden flex flex-col justify-center ${
+          isScrolled
+            ? "bg-transparent border-transparent shadow-none px-1 py-0 mt-3 mb-0 rounded-none" // 壓縮狀態
+            : "bg-white border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4 mt-4 mb-0 rounded-2xl border" // 展開狀態
+        }`}>
+          
+          {/* 頂部文字區 (往下滑會折疊消失) */}
+          <div className={`flex justify-between items-end transition-all duration-300 ease-in-out overflow-hidden ${
+            isScrolled ? "opacity-0 max-h-0 m-0" : "opacity-100 max-h-10 mb-2"
+          }`}>
             <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
               {mode === "basic" ? "基本準備進度" : "積極準備進度"}
             </span>
-            <span className={`text-xl font-black ${mode === "basic" ? "text-teal-600" : "text-amber-500"}`}>
+            <span className={`text-xl font-black transition-colors ${mode === "basic" ? "text-teal-600" : "text-amber-500"}`}>
               {progressPercent}%
             </span>
           </div>
-          <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+
+          {/* 實體進度條 (平滑變細) */}
+          <div className={`w-full bg-slate-100 overflow-hidden transition-all duration-300 ease-in-out ${
+            isScrolled ? "h-1 rounded-full bg-slate-200/80" : "h-2.5 rounded-full"
+          }`}>
             <div 
-              className={`h-2.5 rounded-full transition-all duration-700 ease-out ${
-                mode === "basic" ? "bg-teal-500" : "bg-amber-500"
+              className={`transition-all duration-700 ease-out ${
+                isScrolled
+                  ? (mode === "basic" ? "bg-teal-500 h-1 rounded-full" : "bg-amber-500 h-1 rounded-full")
+                  : (mode === "basic" ? "bg-teal-500 h-2.5 rounded-full" : "bg-amber-500 h-2.5 rounded-full")
               }`}
               style={{ width: `${progressPercent}%` }}
             ></div>
           </div>
-          <p className="text-[11px] text-slate-400 mt-2 text-right">
-            已完成 {completedItems} / {totalItems} 項
-          </p>
-        </div>
-      </header>
+          
+          {/* 底部文字區 (往下滑會折疊消失) */}
+          <div className={`text-right transition-all duration-300 ease-in-out overflow-hidden ${
+            isScrolled ? "opacity-0 max-h-0 m-0" : "opacity-100 max-h-10 mt-2"
+          }`}>
+            <p className="text-[11px] font-medium text-slate-400">
+              已完成 {completedItems} / {totalItems} 項
+            </p>
+          </div>
 
-      {/* 清單內容區域 (帶有低調淡色背景的卡片) */}
-      <main className="p-5 space-y-5">
+        </div>
+      </div>
+
+      {/* 3. 清單內容區域 (往下滾動的本體) */}
+      <main className="px-5 pt-3 pb-5 space-y-5">
         {checklistData.map((category) => {
           const CategoryIcon = category.icon;
-          // 根據當前模式過濾該分類下的物品
           const visibleItems = category.items.filter(item => mode === "proactive" || !item.isAdvanced);
-          
-          // 如果該分類在目前模式下沒有物品，則不顯示
           if (visibleItems.length === 0) return null;
 
           return (
             <section key={category.categoryId} className={`rounded-3xl border overflow-hidden shadow-[0_2px_12px_rgb(0,0,0,0.02)] ${category.theme.bg} ${category.theme.border}`}>
-              {/* 分類標題 */}
               <div className="px-5 py-4 border-b border-white/40 flex items-center gap-3">
                 <div className={`p-2 rounded-xl ${category.theme.iconBg} ${category.theme.iconText} shadow-sm`}>
                   <CategoryIcon size={18} />
                 </div>
                 <h2 className="font-bold text-slate-800 text-sm">{category.title}</h2>
               </div>
-
-              {/* 該分類的物品清單 */}
               <div className="px-3 py-2 pb-3">
                 {visibleItems.map((item) => {
                   const isChecked = !!checkedItems[item.id];
@@ -224,7 +250,6 @@ export default function PreparednessPage() {
                       onClick={() => toggleItem(item.id)}
                       className="flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-colors hover:bg-white/60 active:bg-white/80"
                     >
-                      {/* 打勾圖示 */}
                       <div className="mt-0.5 shrink-0 transition-colors duration-300">
                         {isChecked ? (
                           <CheckCircle2 size={22} className={`${category.theme.iconText} fill-white`} />
@@ -232,16 +257,12 @@ export default function PreparednessPage() {
                           <Circle size={22} className="text-slate-400/50" />
                         )}
                       </div>
-                      
-                      {/* 物品文字區 */}
                       <div className="flex flex-col gap-1 w-full">
                         <span className={`text-[13px] leading-relaxed transition-all duration-300 ${
                           isChecked ? "text-slate-400 line-through" : "text-slate-700 font-medium"
                         }`}>
                           {item.label}
                         </span>
-                        
-                        {/* 積極模式下的進階標籤 */}
                         {item.isAdvanced && mode === "proactive" && !isChecked && (
                           <span className="self-start text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/60 text-amber-600/80 border border-amber-200/50">
                             進階裝備
