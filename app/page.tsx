@@ -1,8 +1,8 @@
 import { calculateTension, getTensionStatus, type TensionData } from "@/lib/calculateTension";
-import { Clock, Crosshair, Globe, TrendingDown, Newspaper, AlertTriangle } from "lucide-react";
+import { Clock, Crosshair, Globe, TrendingDown, Newspaper, ShieldCheck } from "lucide-react";
 
 export default function Home() {
-  // 模擬從後端 API 抓取到的最新數據 (你可以隨意修改這些數字來測試儀表板變色！)
+  // 模擬數據 (維持不變)
   const mockData: TensionData = {
     military: { aircraftSorties: 15, crossedMedianLine: 4, liveFireDrill: false },
     diplomacy: { travelWarningCount: 1, evacuationNotice: false },
@@ -10,112 +10,122 @@ export default function Home() {
     news: { sensitiveKeywordCount: 12 },
   };
 
-  // 根據數據計算總分與狀態
+  // 取得後端計算的分數與原始狀態
   const score = calculateTension(mockData);
-  const status = getTensionStatus(score);
+  const rawStatus = getTensionStatus(score);
 
-  // Tailwind 安全的顏色對應表 (確保編譯器能正確產生顏色)
-  const colorMap = {
-    "最高警戒": { border: "border-warning-red", text: "text-warning-red", glow: "bg-warning-red" },
-    "高度警戒": { border: "border-warning-orange", text: "text-warning-orange", glow: "bg-warning-orange" },
-    "加強戒備": { border: "border-warning-yellow", text: "text-warning-yellow", glow: "bg-warning-yellow" },
-    "狀況平常": { border: "border-warning-green", text: "text-warning-green", glow: "bg-warning-green" },
+  // 【UX 柔化處理】將後端的嚴厲字眼與顏色，轉換為前端安定情緒的色調與文字
+  const softUITheme = {
+    "最高警戒": { label: "需密切關注", color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-200" },
+    "高度警戒": { label: "局勢波動", color: "text-orange-500", bg: "bg-orange-50", border: "border-orange-200" },
+    "加強戒備": { label: "適度關注", color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-200" },
+    "狀況平常": { label: "局勢安定", color: "text-teal-600", bg: "bg-teal-50", border: "border-teal-200" },
   };
-  const theme = colorMap[status.label as keyof typeof colorMap] || colorMap["狀況平常"];
+  const theme = softUITheme[rawStatus.label as keyof typeof softUITheme] || softUITheme["狀況平常"];
 
   return (
-    <div className="min-h-screen pt-6 px-4 pb-24 flex flex-col gap-6">
+    <div className="min-h-screen bg-[#f8fafc] pt-6 px-5 pb-24 flex flex-col gap-6 font-sans">
       {/* 1. 頂部狀態區 (Header) */}
       <header className="flex justify-between items-end">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">情報總覽</h1>
-          <p className="text-sm text-slate-500 font-medium mt-1">台海戰爭預警系統</p>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">台海動態總覽</h1>
+          <p className="text-sm text-slate-500 mt-1">客觀數據 • 安定守護</p>
         </div>
-        <div className="flex items-center text-xs text-slate-500 bg-slate-200/50 px-2 py-1 rounded-md">
-          <Clock size={12} className="mr-1" />
-          <span>更新於 10 分鐘前</span>
+        <div className="flex items-center text-xs text-slate-400 bg-white border border-slate-100 px-3 py-1.5 rounded-full shadow-sm">
+          <Clock size={14} className="mr-1.5" />
+          <span>10 分鐘前更新</span>
         </div>
       </header>
 
-      {/* 2. 核心警報儀表板 (Hero Dashboard) */}
-      <section className={`relative w-full rounded-3xl p-6 shadow-lg flex flex-col items-center justify-center overflow-hidden bg-white border-2 ${theme.border}`}>
-        {/* 背景裝飾光暈 */}
-        <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-10 blur-2xl ${theme.glow}`}></div>
+      {/* 2. 核心半圓形儀表板 (Fear & Greed Style Gauge) */}
+      <section className="w-full bg-white rounded-3xl p-6 shadow-[0_2px_20px_rgb(0,0,0,0.03)] border border-slate-100 flex flex-col items-center relative overflow-hidden">
+        <h2 className="text-sm font-semibold text-slate-500 mb-6 tracking-wider">整體局勢指標</h2>
         
-        <h2 className="text-sm font-bold text-slate-500 mb-2 uppercase tracking-widest">當前緊張係數</h2>
-        
-        {/* 數字儀表 */}
-        <div className={`w-40 h-40 rounded-full flex flex-col items-center justify-center border-[8px] ${theme.border} border-opacity-20 relative`}>
-          <span className={`text-6xl font-black ${theme.text}`}>
-            {score}
-          </span>
-          <span className="text-slate-400 text-sm font-medium mt-1">/ 100</span>
+        {/* SVG 半圓指針儀表板 */}
+        <div className="relative w-full max-w-[240px] aspect-[2/1] mb-2">
+          <svg viewBox="0 0 100 55" className="w-full h-full overflow-visible drop-shadow-sm">
+            {/* 圓弧底色區段 (半徑35，圓周長約110) */}
+            {/* 0-39: 安定 (Teal) */}
+            <path d="M 15 50 A 35 35 0 0 1 85 50" fill="none" stroke="#14b8a6" strokeWidth="6" strokeLinecap="round" strokeDasharray="44 110" />
+            {/* 40-59: 適度關注 (Amber) */}
+            <path d="M 15 50 A 35 35 0 0 1 85 50" fill="none" stroke="#f59e0b" strokeWidth="6" strokeDasharray="22 110" strokeDashoffset="-44" />
+            {/* 60-79: 局勢波動 (Orange) */}
+            <path d="M 15 50 A 35 35 0 0 1 85 50" fill="none" stroke="#f97316" strokeWidth="6" strokeDasharray="22 110" strokeDashoffset="-66" />
+            {/* 80-100: 密切關注 (Rose) */}
+            <path d="M 15 50 A 35 35 0 0 1 85 50" fill="none" stroke="#f43f5e" strokeWidth="6" strokeLinecap="round" strokeDasharray="22 110" strokeDashoffset="-88" />
+            
+            {/* 動態指針 (Pivot at 50,50) */}
+            <g style={{ transform: `rotate(${(score / 100) * 180}deg)`, transformOrigin: '50px 50px', transition: 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+              {/* 指針本體 (指向左邊 0 分的位置) */}
+              <polygon points="50,48 18,50 50,52" fill="#475569" />
+              {/* 指針尾部裝飾 */}
+              <polygon points="50,48 56,50 50,52" fill="#94a3b8" />
+            </g>
+            {/* 軸心圓點 */}
+            <circle cx="50" cy="50" r="3.5" fill="#334155" />
+            <circle cx="50" cy="50" r="1.5" fill="#ffffff" />
+          </svg>
+          
+          {/* 指數數字顯示在半圓內部 */}
+          <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-end pb-1">
+            <span className={`text-4xl font-extrabold tracking-tighter ${theme.color}`}>
+              {score}
+            </span>
+          </div>
         </div>
 
-        {/* 狀態標籤 */}
-        <div className={`mt-6 px-6 py-2 rounded-full text-sm font-bold tracking-wide shadow-sm ${status.color}`}>
-          {status.label}
+        {/* 柔和的狀態標籤 */}
+        <div className={`mt-4 px-5 py-1.5 rounded-full text-sm font-bold tracking-wide border ${theme.bg} ${theme.color} ${theme.border}`}>
+          {theme.label}
         </div>
       </section>
 
-      {/* 3. 四大指標狀態卡片 (Indicator Cards) */}
-      <section className="grid grid-cols-2 gap-3">
-        {/* 軍事 */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-red-50 text-red-600 rounded-lg">
-              <Crosshair size={18} />
-            </div>
-            <h3 className="font-bold text-slate-700 text-sm">軍事動態</h3>
+      {/* 3. 四大指標狀態卡片 (柔化版設計) */}
+      <section className="grid grid-cols-2 gap-3.5">
+        <div className="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-slate-100/60">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-1.5 bg-slate-50 text-slate-500 rounded-lg"><Crosshair size={16} /></div>
+            <h3 className="font-semibold text-slate-600 text-xs">軍事動態</h3>
           </div>
-          <p className="text-2xl font-black text-slate-900 mt-1">{mockData.military.aircraftSorties} <span className="text-xs text-slate-500 font-normal">架次</span></p>
-          <p className="text-xs text-red-500 font-medium mt-1">越線 {mockData.military.crossedMedianLine} 架次</p>
+          <p className="text-xl font-bold text-slate-800">{mockData.military.aircraftSorties} <span className="text-xs font-normal text-slate-400">架次</span></p>
+          <p className="text-[11px] text-slate-500 mt-1">越線 {mockData.military.crossedMedianLine} 架次</p>
         </div>
 
-        {/* 外交 */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-              <Globe size={18} />
-            </div>
-            <h3 className="font-bold text-slate-700 text-sm">外交撤僑</h3>
+        <div className="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-slate-100/60">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-1.5 bg-slate-50 text-slate-500 rounded-lg"><Globe size={16} /></div>
+            <h3 className="font-semibold text-slate-600 text-xs">外交撤僑</h3>
           </div>
-          <p className="text-2xl font-black text-slate-900 mt-1">{mockData.diplomacy.travelWarningCount} <span className="text-xs text-slate-500 font-normal">國</span></p>
-          <p className="text-xs text-slate-500 font-medium mt-1">提升旅遊警示</p>
+          <p className="text-xl font-bold text-slate-800">{mockData.diplomacy.travelWarningCount} <span className="text-xs font-normal text-slate-400">國</span></p>
+          <p className="text-[11px] text-slate-500 mt-1">提升旅遊警示</p>
         </div>
 
-        {/* 金融 */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
-              <TrendingDown size={18} />
-            </div>
-            <h3 className="font-bold text-slate-700 text-sm">金融異動</h3>
+        <div className="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-slate-100/60">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-1.5 bg-slate-50 text-slate-500 rounded-lg"><TrendingDown size={16} /></div>
+            <h3 className="font-semibold text-slate-600 text-xs">金融異動</h3>
           </div>
-          <p className="text-2xl font-black text-slate-900 mt-1">-{mockData.finance.taiexDropPercent}%</p>
-          <p className="text-xs text-slate-500 font-medium mt-1">台股大盤跌幅</p>
+          <p className="text-xl font-bold text-slate-800">-{mockData.finance.taiexDropPercent}%</p>
+          <p className="text-[11px] text-slate-500 mt-1">台股大盤波動</p>
         </div>
 
-        {/* 新聞 */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-              <Newspaper size={18} />
-            </div>
-            <h3 className="font-bold text-slate-700 text-sm">新聞情緒</h3>
+        <div className="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-slate-100/60">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-1.5 bg-slate-50 text-slate-500 rounded-lg"><Newspaper size={16} /></div>
+            <h3 className="font-semibold text-slate-600 text-xs">新聞情緒</h3>
           </div>
-          <p className="text-2xl font-black text-slate-900 mt-1">{mockData.news.sensitiveKeywordCount} <span className="text-xs text-slate-500 font-normal">則</span></p>
-          <p className="text-xs text-slate-500 font-medium mt-1">敏感關鍵字觸發</p>
+          <p className="text-xl font-bold text-slate-800">{mockData.news.sensitiveKeywordCount} <span className="text-xs font-normal text-slate-400">則</span></p>
+          <p className="text-[11px] text-slate-500 mt-1">敏感情緒指標</p>
         </div>
       </section>
 
-      {/* 4. 最新關鍵動態跑馬燈/列表 (Latest Alerts) */}
-      <section className="bg-orange-50 border border-orange-100 rounded-2xl p-4 flex gap-3 items-start shadow-sm">
-        <AlertTriangle className="text-warning-orange shrink-0 mt-0.5" size={20} />
+      {/* 4. 最新關鍵動態 (更為安定的提示框) */}
+      <section className="bg-teal-50/50 border border-teal-100 rounded-2xl p-4 flex gap-3 items-start shadow-sm">
+        <ShieldCheck className="text-teal-600 shrink-0 mt-0.5" size={18} />
         <div>
-          <h4 className="text-sm font-bold text-orange-900 mb-1">最新警示動態</h4>
-          <p className="text-xs text-orange-800 leading-relaxed">
-            國防部發布偵獲共機 15 架次，其中 4 架次逾越海峽中線。美方微幅提升台海周邊旅遊注意層級。
+          <h4 className="text-sm font-bold text-teal-800 mb-1">系統提示</h4>
+          <p className="text-xs text-teal-700/80 leading-relaxed">
+            目前指標呈現穩健狀態。建議可利用閒暇時間至「準備」分頁查看急難救助包清單，保持從容不迫的防備心。
           </p>
         </div>
       </section>
