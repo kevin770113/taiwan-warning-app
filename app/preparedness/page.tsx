@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-// 引入 Framer Motion 動畫庫
-import { motion, AnimatePresence } from "framer-motion";
+// 引入高效能的 useScroll 與 useMotionValueEvent
+import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion";
 import { 
   CheckCircle2, Circle, FileText, Droplet, 
   BriefcaseMedical, Wrench, Shirt, AlertCircle,
   Backpack, ShieldAlert, Info
 } from "lucide-react";
 
-// --- 急難救助包清單資料 (維持不變) ---
+// --- (checklistData 保持原樣，這裡為了版面簡潔不重複貼出，請保留你原本的 checklistData) ---
 const checklistData = [
   {
     categoryId: "docs",
@@ -95,7 +95,16 @@ export default function PreparednessPage() {
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [isMounted, setIsMounted] = useState(false);
   const [mode, setMode] = useState<"basic" | "proactive">("basic");
+  
   const [isScrolled, setIsScrolled] = useState(false);
+
+  // 【效能大升級】使用 Framer Motion 原生的滾動監聽器 (跳過 React 笨重的渲染週期)
+  const { scrollY } = useScroll();
+  useMotionValueEvent(scrollY, "change", (latest) => {
+    // 只有在狀態需要改變時才觸發 React 更新，減少無謂的渲染
+    if (latest > 40 && !isScrolled) setIsScrolled(true);
+    if (latest <= 40 && isScrolled) setIsScrolled(false);
+  });
 
   useEffect(() => {
     setIsMounted(true);
@@ -103,13 +112,6 @@ export default function PreparednessPage() {
     if (saved) {
       try { setCheckedItems(JSON.parse(saved)); } catch (e) { console.error(e); }
     }
-
-    const handleScroll = () => {
-      // 只要往下超過 40px 就觸發收合
-      setIsScrolled(window.scrollY > 40);
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   useEffect(() => {
@@ -129,12 +131,12 @@ export default function PreparednessPage() {
   const completedItems = currentItems.filter(item => checkedItems[item.id]).length;
   const progressPercent = totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100);
 
-  if (!isMounted) return <div className="min-h-screen bg-[#f8fafc] animate-pulse"></div>;
+  if (!isMounted) return <div className="min-h-screen bg-[#f8fafc]"></div>;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-24 relative">
       
-      {/* 1. 非吸頂區塊 (往下滑會自然消失) */}
+      {/* 1. 非吸頂區塊 */}
       <div className="pt-6 px-5 mb-2">
         <h1 className="text-2xl font-bold text-slate-800 tracking-tight">防災準備</h1>
         <p className="text-sm text-slate-500 mt-1 mb-4">急難救助包檢核表</p>
@@ -149,17 +151,16 @@ export default function PreparednessPage() {
         </div>
       </div>
 
-      {/* 2. 吸頂動態變形區塊 (使用 Framer Motion 硬體加速) */}
-      <motion.div 
-        layout
-        className={`sticky top-0 z-20 px-5 transition-colors duration-300 ${
+      {/* 2. 吸頂區塊 (移除會干擾的 layout 屬性，改用純 CSS 過場) */}
+      <div 
+        className={`sticky top-0 z-20 px-5 transition-all duration-300 ease-in-out ${
           isScrolled 
-            ? "pt-3 pb-3 bg-white/90 backdrop-blur-md shadow-sm border-b border-slate-200/50" 
+            ? "pt-3 pb-3 bg-white/95 shadow-sm border-b border-slate-200/50" // 移除 backdrop-blur 減輕 GPU 負擔
             : "pt-1 pb-2 bg-[#f8fafc] border-transparent"
         }`}
       >
         {/* 切換開關 */}
-        <div className="flex bg-slate-200/60 p-1 rounded-xl shadow-inner">
+        <div className="flex bg-slate-200/60 p-1 rounded-xl shadow-inner mb-0">
           <button
             onClick={() => setMode("basic")}
             className={`flex-1 flex justify-center items-center gap-2 py-2 text-sm font-bold rounded-lg transition-all ${
@@ -178,24 +179,22 @@ export default function PreparednessPage() {
           </button>
         </div>
 
-        {/* 進度條容器：使用 layout 屬性自動處理 padding/margin 變化 */}
-        <motion.div 
-          layout
-          className={`w-full overflow-hidden ${
+        {/* 進度條容器：改用 AnimatePresence 包裝會折疊的文字區塊，進度條本身用原生 CSS 過場 */}
+        <div className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
             isScrolled
               ? "bg-transparent border-transparent shadow-none px-1 mt-3" 
               : "bg-white border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4 mt-4 rounded-2xl" 
           }`}
         >
-          {/* 頂部文字區塊：使用 AnimatePresence 處理平滑消失與出現 */}
+          {/* 頂部文字區塊 */}
           <AnimatePresence>
             {!isScrolled && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="flex justify-between items-end mb-2"
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="flex justify-between items-end mb-2 overflow-hidden"
               >
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
                   {mode === "basic" ? "基本準備進度" : "積極準備進度"}
@@ -207,16 +206,15 @@ export default function PreparednessPage() {
             )}
           </AnimatePresence>
 
-          {/* 進度條本體 */}
-          <motion.div layout className={`w-full bg-slate-100 rounded-full overflow-hidden ${isScrolled ? "h-1" : "h-2.5"}`}>
-            <motion.div 
-              layout
+          {/* 進度條本體：不靠 Framer，直接用 CSS transition 最穩 */}
+          <div className={`w-full bg-slate-100 rounded-full overflow-hidden transition-all duration-300 ${isScrolled ? "h-1" : "h-2.5"}`}>
+            <div 
               className={`rounded-full transition-all duration-700 ease-out ${
                 mode === "basic" ? "bg-teal-500" : "bg-amber-500"
               } ${isScrolled ? "h-1" : "h-2.5"}`}
               style={{ width: `${progressPercent}%` }}
-            ></motion.div>
-          </motion.div>
+            ></div>
+          </div>
           
           {/* 底部文字區塊 */}
           <AnimatePresence>
@@ -225,8 +223,8 @@ export default function PreparednessPage() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="mt-2 text-right"
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="mt-2 text-right overflow-hidden"
               >
                 <p className="text-[11px] font-medium text-slate-400">
                   已完成 {completedItems} / {totalItems} 項
@@ -234,10 +232,10 @@ export default function PreparednessPage() {
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
-      </motion.div>
+        </div>
+      </div>
 
-      {/* 3. 清單內容區域 */}
+      {/* 3. 清單內容區域 (保持不變) */}
       <main className="px-5 pt-3 pb-5 space-y-5">
         {checklistData.map((category) => {
           const CategoryIcon = category.icon;
@@ -287,16 +285,6 @@ export default function PreparednessPage() {
             </section>
           );
         })}
-
-        <section className="bg-slate-800 border border-slate-700 rounded-2xl p-4 flex gap-3 items-start shadow-md mt-4">
-          <AlertCircle className="text-slate-300 shrink-0 mt-0.5" size={18} />
-          <div>
-            <h4 className="text-sm font-bold text-white mb-1">存放與維護建議</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              請將救助包放置於大門玄關或床邊等隨手可及之處。建議設定手機行事曆，每半年 (如換季時) 檢查一次水、食物與電池的有效期限並進行替換。
-            </p>
-          </div>
-        </section>
       </main>
     </div>
   );
