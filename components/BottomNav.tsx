@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Activity, ShieldAlert, Map } from "lucide-react";
+// 引入 Globe 給情報用，把 Activity 讓給地震用
+import { Home, Globe, ShieldAlert, Map, Activity } from "lucide-react";
 
 export default function BottomNav() {
   const pathname = usePathname();
 
+  // 在這裡加入第五個分頁「地震」
   const navItems = [
     { name: "總覽", href: "/", icon: Home },
-    { name: "情報", href: "/intelligence", icon: Activity },
+    { name: "情報", href: "/intelligence", icon: Globe },
     { name: "準備", href: "/preparedness", icon: ShieldAlert },
     { name: "避難", href: "/shelters", icon: Map },
+    { name: "地震", href: "/earthquake", icon: Activity }, // 🌟 新增的地震分頁
   ];
 
   return (
