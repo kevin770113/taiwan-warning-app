@@ -3,78 +3,99 @@
 import { useState, useEffect } from "react";
 import { 
   CheckCircle2, Circle, FileText, Droplet, 
-  BriefcaseMedical, Wrench, Shirt, AlertCircle 
+  BriefcaseMedical, Wrench, Shirt, AlertCircle,
+  Backpack, ShieldAlert, Info
 } from "lucide-react";
 
-// --- 急難救助包清單資料 ---
+// --- 急難救助包清單資料 (包含基本與積極型標籤) ---
 const checklistData = [
   {
     categoryId: "docs",
     title: "重要證件與財務",
     icon: FileText,
-    theme: "text-blue-600 bg-blue-50 border-blue-100",
+    // 卡片整體的低調淡色背景
+    theme: { bg: "bg-blue-50/50", border: "border-blue-100/80", iconBg: "bg-blue-100/80", iconText: "text-blue-600" },
     items: [
-      { id: "id_card", label: "身分證、健保卡 (正本或影本)" },
-      { id: "cash", label: "少量現金與零錢" },
-      { id: "contacts", label: "紙本重要聯絡人名冊" },
+      { id: "id_card", label: "身分證、健保卡、駕照 (正本或雙面影本)", isAdvanced: false },
+      { id: "cash", label: "少量現金與零錢 (含百元鈔與硬幣)", isAdvanced: false },
+      { id: "contacts", label: "紙本緊急聯絡人名冊與避難所地址", isAdvanced: false },
+      { id: "property_docs", label: "存摺、地契、保單等重要財產證明影本 (放水袋密封)", isAdvanced: true },
+      { id: "passport", label: "備用大頭照數張、護照正本", isAdvanced: true },
+      { id: "spare_keys", label: "實體備用鑰匙 (住家、車輛)", isAdvanced: true },
     ]
   },
   {
     categoryId: "water_food",
-    title: "飲食與飲水 (建議備妥3日份)",
+    title: "飲食與飲水",
     icon: Droplet,
-    theme: "text-cyan-600 bg-cyan-50 border-cyan-100",
+    theme: { bg: "bg-cyan-50/50", border: "border-cyan-100/80", iconBg: "bg-cyan-100/80", iconText: "text-cyan-600" },
     items: [
-      { id: "water", label: "瓶裝水 (每人每天約3公升)" },
-      { id: "food", label: "高熱量乾糧、罐頭、保久乳" },
-      { id: "opener", label: "開罐器與簡易餐具" },
+      { id: "water", label: "瓶裝水 (每人每天至少 3 公升)", isAdvanced: false },
+      { id: "food", label: "高熱量且免加熱乾糧 (能量棒、巧克力)", isAdvanced: false },
+      { id: "can_food", label: "易開罐罐頭、保久乳", isAdvanced: false },
+      { id: "water_filter", label: "便攜式個人淨水吸管或淨水藥片", isAdvanced: true },
+      { id: "stove", label: "卡式爐、備用瓦斯罐與簡易炊具", isAdvanced: true },
+      { id: "mre", label: "脫水乾燥飯、軍用口糧 (MRE) 或真空包裝食品", isAdvanced: true },
+      { id: "vitamins", label: "維他命發泡錠或綜合維他命", isAdvanced: true },
     ]
   },
   {
     categoryId: "medical",
     title: "醫療與個人衛生",
     icon: BriefcaseMedical,
-    theme: "text-emerald-600 bg-emerald-50 border-emerald-100",
+    theme: { bg: "bg-emerald-50/50", border: "border-emerald-100/80", iconBg: "bg-emerald-100/80", iconText: "text-emerald-600" },
     items: [
-      { id: "first_aid", label: "急救包 (優碘、紗布、OK繃)" },
-      { id: "meds", label: "個人慢性病藥物 (至少備妥2週)" },
-      { id: "hygiene", label: "衛生紙、濕紙巾、女性生理用品" },
-      { id: "mask", label: "醫療口罩與防塵口罩" },
+      { id: "meds", label: "個人慢性病藥物 (至少備妥 14 天份)", isAdvanced: false },
+      { id: "first_aid", label: "基礎急救包 (優碘、紗布、透氣膠帶、生理食鹽水)", isAdvanced: false },
+      { id: "hygiene", label: "衛生紙、濕紙巾、女性生理用品", isAdvanced: false },
+      { id: "mask", label: "醫療口罩、酒精噴霧", isAdvanced: false },
+      { id: "trauma_kit", label: "進階外傷急救品 (止血帶、以色列繃帶、醫療剪刀)", isAdvanced: true },
+      { id: "otc_meds", label: "常備非處方藥 (解熱鎮痛藥、止瀉藥、抗組織胺、胃藥)", isAdvanced: true },
+      { id: "waste_bags", label: "簡易排泄處理袋 (斷水時馬桶無法使用)", isAdvanced: true },
+      { id: "n95", label: "防塵護目鏡、N95 防護口罩", isAdvanced: true },
     ]
   },
   {
     categoryId: "tools",
     title: "工具與通訊",
     icon: Wrench,
-    theme: "text-amber-600 bg-amber-50 border-amber-100",
+    theme: { bg: "bg-amber-50/50", border: "border-amber-100/80", iconBg: "bg-amber-100/80", iconText: "text-amber-600" },
     items: [
-      { id: "flashlight", label: "手電筒與備用電池" },
-      { id: "radio", label: "可攜式收音機 (獲取外界資訊)" },
-      { id: "powerbank", label: "行動電源與充電線" },
-      { id: "whistle", label: "求救哨子、瑞士刀或多功能工具" },
+      { id: "flashlight", label: "LED 手電筒與對應的備用電池", isAdvanced: false },
+      { id: "powerbank", label: "大容量行動電源與充電線", isAdvanced: false },
+      { id: "whistle", label: "高分貝求救哨子", isAdvanced: false },
+      { id: "gloves", label: "粗棉工作手套 (搬開碎石或玻璃時保護雙手)", isAdvanced: false },
+      { id: "multitool", label: "多功能工具鉗 (如瑞士刀或 Leatherman)", isAdvanced: true },
+      { id: "radio", label: "手搖式發電收音機 (兼具手電筒與充電功能)", isAdvanced: true },
+      { id: "solar", label: "便攜式太陽能充電板", isAdvanced: true },
+      { id: "tape_cord", label: "大力膠帶 (Duct tape) 與 傘繩 (550 Paracord)", isAdvanced: true },
+      { id: "map", label: "實體台灣公路地圖、指南針", isAdvanced: true },
     ]
   },
   {
     categoryId: "clothing",
     title: "衣物與保暖",
     icon: Shirt,
-    theme: "text-violet-600 bg-violet-50 border-violet-100",
+    theme: { bg: "bg-violet-50/50", border: "border-violet-100/80", iconBg: "bg-violet-100/80", iconText: "text-violet-600" },
     items: [
-      { id: "raincoat", label: "輕便雨衣 (防雨兼保暖)" },
-      { id: "blanket", label: "急難保暖毯 (鋁箔材質)" },
-      { id: "clothes", label: "輕便換洗衣物與粗棉手套" },
-      { id: "shoes", label: "堅固好走的鞋子 (勿穿拖鞋)" },
+      { id: "blanket", label: "急難保暖毯 (鋁箔材質，防風防失溫)", isAdvanced: false },
+      { id: "raincoat", label: "輕便雨衣 (防雨兼具基礎保暖)", isAdvanced: false },
+      { id: "shoes", label: "耐磨好走的包鞋或登山鞋 (絕對不可穿拖鞋)", isAdvanced: false },
+      { id: "clothes", label: "一套輕便換洗衣物與免洗內褲", isAdvanced: false },
+      { id: "jacket", label: "防風防水外套 (Gore-Tex 或同等級材質)", isAdvanced: true },
+      { id: "sleeping_bag", label: "輕量化羽絨睡袋", isAdvanced: true },
+      { id: "beanie_socks", label: "保暖毛帽與羊毛襪", isAdvanced: true },
+      { id: "headlamp", label: "免提式頭燈 (讓雙手能空出來做事)", isAdvanced: true },
     ]
   }
 ];
 
 export default function PreparednessPage() {
-  // 紀錄打勾狀態，格式為 { "id_card": true, "water": false, ... }
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
-  // 確認元件是否已經掛載 (用於解決 Next.js SSR 與 LocalStorage 的衝突)
   const [isMounted, setIsMounted] = useState(false);
+  const [mode, setMode] = useState<"basic" | "proactive">("basic");
 
-  // 1. 網頁載入時，從手機 LocalStorage 讀取先前的紀錄
+  // 讀取 LocalStorage
   useEffect(() => {
     setIsMounted(true);
     const saved = localStorage.getItem("emergency_kit_progress");
@@ -87,49 +108,83 @@ export default function PreparednessPage() {
     }
   }, []);
 
-  // 2. 當打勾狀態改變時，自動存入手機 LocalStorage
+  // 存入 LocalStorage
   useEffect(() => {
     if (isMounted) {
       localStorage.setItem("emergency_kit_progress", JSON.stringify(checkedItems));
     }
   }, [checkedItems, isMounted]);
 
-  // 切換打勾狀態的函式
   const toggleItem = (id: string) => {
-    setCheckedItems(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
+    setCheckedItems(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // 計算進度百分比
-  const totalItems = checklistData.reduce((acc, cat) => acc + cat.items.length, 0);
-  const completedItems = Object.values(checkedItems).filter(Boolean).length;
+  // 動態計算當前模式的進度
+  const currentItems = checklistData.flatMap(cat => 
+    cat.items.filter(item => mode === "proactive" || !item.isAdvanced)
+  );
+  const totalItems = currentItems.length;
+  const completedItems = currentItems.filter(item => checkedItems[item.id]).length;
   const progressPercent = totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100);
 
-  // 避免畫面閃爍，在載入完成前先顯示骨架屏
   if (!isMounted) {
     return <div className="min-h-screen bg-[#f8fafc] animate-pulse"></div>;
   }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-24">
-      {/* 頂部 Header 與進度條 */}
-      <header className="pt-6 px-5 pb-6 bg-white border-b border-slate-100 sticky top-0 z-10 shadow-sm">
+      {/* 頂部 Header 與動態進度條 (吸頂) */}
+      <header className="pt-5 px-5 pb-5 bg-white border-b border-slate-100 sticky top-0 z-10 shadow-sm">
         <div className="mb-4">
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">防災準備</h1>
           <p className="text-sm text-slate-500 mt-1">急難救助包檢核表</p>
         </div>
 
+        {/* 雙模式切換開關 */}
+        <div className="flex bg-slate-100/80 p-1 rounded-xl mb-4 shadow-inner">
+          <button
+            onClick={() => setMode("basic")}
+            className={`flex-1 flex justify-center items-center gap-2 py-2 text-sm font-bold rounded-lg transition-all ${
+              mode === "basic" ? "bg-white text-teal-700 shadow-sm" : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <Backpack size={16} /> 基本避難 (3天)
+          </button>
+          <button
+            onClick={() => setMode("proactive")}
+            className={`flex-1 flex justify-center items-center gap-2 py-2 text-sm font-bold rounded-lg transition-all ${
+              mode === "proactive" ? "bg-white text-amber-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <ShieldAlert size={16} /> 積極防備 (7天+)
+          </button>
+        </div>
+
+        {/* 目標用途差異說明 (依據模式動態切換) */}
+        <div className="mb-4 flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+          <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-slate-600 leading-relaxed">
+            {mode === "basic" 
+              ? "目標：應對突發狀況，能於 3 分鐘內攜帶逃生的「避難逃生包 (Go-Bag)」，以維持 3 天基礎生存為原則。"
+              : "目標：應對長期斷網斷電、封鎖或居家「就地掩蔽 (Shelter-in-place)」，以維持 1~2 週生存與較高自救能力為原則。"}
+          </p>
+        </div>
+
         {/* 進度條區塊 */}
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
           <div className="flex justify-between items-end mb-2">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">準備進度</span>
-            <span className="text-xl font-black text-teal-600">{progressPercent}%</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              {mode === "basic" ? "基本準備進度" : "積極準備進度"}
+            </span>
+            <span className={`text-xl font-black ${mode === "basic" ? "text-teal-600" : "text-amber-500"}`}>
+              {progressPercent}%
+            </span>
           </div>
-          <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+          <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
             <div 
-              className="bg-teal-500 h-2.5 rounded-full transition-all duration-700 ease-out"
+              className={`h-2.5 rounded-full transition-all duration-700 ease-out ${
+                mode === "basic" ? "bg-teal-500" : "bg-amber-500"
+              }`}
               style={{ width: `${progressPercent}%` }}
             ></div>
           </div>
@@ -139,45 +194,60 @@ export default function PreparednessPage() {
         </div>
       </header>
 
-      {/* 清單內容區域 */}
-      <main className="p-5 space-y-6">
+      {/* 清單內容區域 (帶有低調淡色背景的卡片) */}
+      <main className="p-5 space-y-5">
         {checklistData.map((category) => {
           const CategoryIcon = category.icon;
+          // 根據當前模式過濾該分類下的物品
+          const visibleItems = category.items.filter(item => mode === "proactive" || !item.isAdvanced);
+          
+          // 如果該分類在目前模式下沒有物品，則不顯示
+          if (visibleItems.length === 0) return null;
+
           return (
-            <section key={category.categoryId} className="bg-white rounded-3xl shadow-[0_2px_12px_rgb(0,0,0,0.02)] border border-slate-100 overflow-hidden">
+            <section key={category.categoryId} className={`rounded-3xl border overflow-hidden shadow-[0_2px_12px_rgb(0,0,0,0.02)] ${category.theme.bg} ${category.theme.border}`}>
               {/* 分類標題 */}
-              <div className="px-5 py-4 border-b border-slate-50 flex items-center gap-3">
-                <div className={`p-2 rounded-xl border ${category.theme}`}>
+              <div className="px-5 py-4 border-b border-white/40 flex items-center gap-3">
+                <div className={`p-2 rounded-xl ${category.theme.iconBg} ${category.theme.iconText} shadow-sm`}>
                   <CategoryIcon size={18} />
                 </div>
-                <h2 className="font-bold text-slate-700 text-sm">{category.title}</h2>
+                <h2 className="font-bold text-slate-800 text-sm">{category.title}</h2>
               </div>
 
               {/* 該分類的物品清單 */}
-              <div className="px-3 py-2">
-                {category.items.map((item) => {
+              <div className="px-3 py-2 pb-3">
+                {visibleItems.map((item) => {
                   const isChecked = !!checkedItems[item.id];
                   return (
                     <div 
                       key={item.id} 
                       onClick={() => toggleItem(item.id)}
-                      className="flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-colors hover:bg-slate-50 active:bg-slate-100"
+                      className="flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-colors hover:bg-white/60 active:bg-white/80"
                     >
                       {/* 打勾圖示 */}
                       <div className="mt-0.5 shrink-0 transition-colors duration-300">
                         {isChecked ? (
-                          <CheckCircle2 size={22} className="text-teal-500 fill-teal-50" />
+                          <CheckCircle2 size={22} className={`${category.theme.iconText} fill-white`} />
                         ) : (
-                          <Circle size={22} className="text-slate-300" />
+                          <Circle size={22} className="text-slate-400/50" />
                         )}
                       </div>
                       
-                      {/* 物品文字 (打勾後加上刪除線與變淡) */}
-                      <span className={`text-sm leading-relaxed transition-all duration-300 ${
-                        isChecked ? "text-slate-400 line-through" : "text-slate-700 font-medium"
-                      }`}>
-                        {item.label}
-                      </span>
+                      {/* 物品文字區 */}
+                      <div className="flex flex-col gap-1 w-full">
+                        <span className={`text-[13px] leading-relaxed transition-all duration-300 ${
+                          isChecked ? "text-slate-400 line-through" : "text-slate-700 font-medium"
+                        }`}>
+                          {item.label}
+                        </span>
+                        
+                        {/* 積極模式下的進階標籤 */}
+                        {item.isAdvanced && mode === "proactive" && !isChecked && (
+                          <span className="self-start text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/60 text-amber-600/80 border border-amber-200/50">
+                            進階裝備
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -187,12 +257,12 @@ export default function PreparednessPage() {
         })}
 
         {/* 底部溫馨提示 */}
-        <section className="bg-amber-50/60 border border-amber-100/80 rounded-2xl p-4 flex gap-3 items-start shadow-sm mt-2">
-          <AlertCircle className="text-amber-500 shrink-0 mt-0.5" size={18} />
+        <section className="bg-slate-800 border border-slate-700 rounded-2xl p-4 flex gap-3 items-start shadow-md mt-4">
+          <AlertCircle className="text-slate-300 shrink-0 mt-0.5" size={18} />
           <div>
-            <h4 className="text-sm font-bold text-amber-800 mb-1">存放建議</h4>
-            <p className="text-xs text-amber-700/80 leading-relaxed">
-              請將救助包放置於玄關、大門或床邊等隨手可及之處。建議每半年 (如換季時) 檢查一次水、食物與藥品的有效期限並進行替換。
+            <h4 className="text-sm font-bold text-white mb-1">存放與維護建議</h4>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              請將救助包放置於大門玄關或床邊等隨手可及之處。建議設定手機行事曆，每半年 (如換季時) 檢查一次水、食物與電池的有效期限並進行替換。
             </p>
           </div>
         </section>
