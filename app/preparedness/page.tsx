@@ -8,7 +8,7 @@ import {
   Backpack, ShieldAlert, Info
 } from "lucide-react";
 
-// --- 急難救助包清單資料 ---
+// --- 急難救助包清單資料 (維持不變) ---
 const checklistData = [
   {
     categoryId: "docs",
@@ -95,13 +95,14 @@ export default function PreparednessPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [mode, setMode] = useState<"basic" | "proactive">("basic");
   
-  const [isScrolled, setIsScrolled] = useState(false);
+  // 決定何時顯示「頂層極簡 Header」
+  const [showMiniHeader, setShowMiniHeader] = useState(false);
 
-  // 保持 Framer Motion 高效能的監聽，但不使用它來做 DOM 的排版動畫
   const { scrollY } = useScroll();
   useMotionValueEvent(scrollY, "change", (latest) => {
-    if (latest > 40 && !isScrolled) setIsScrolled(true);
-    if (latest <= 40 && isScrolled) setIsScrolled(false);
+    // 當往下滑動超過 200px (差不多是完整 Header 離開視線的時候)
+    if (latest > 200 && !showMiniHeader) setShowMiniHeader(true);
+    if (latest <= 200 && showMiniHeader) setShowMiniHeader(false);
   });
 
   useEffect(() => {
@@ -134,12 +135,56 @@ export default function PreparednessPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-24 relative">
       
-      {/* 1. 非吸頂區塊 */}
+      {/* =========================================
+          🔥 頂層：極簡版 Mini Header (完全固定，靠 GPU 淡入淡出)
+          ========================================= */}
+      <div 
+        className={`fixed top-0 z-50 w-full max-w-md mx-auto transition-all duration-300 ease-out ${
+          showMiniHeader ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
+        }`}
+      >
+        <div className="bg-white/95 backdrop-blur-md shadow-sm pt-4 pb-0 px-5">
+          {/* 迷你雙模式切換 */}
+          <div className="flex bg-slate-100/80 p-1 rounded-xl shadow-inner mb-3">
+            <button
+              onClick={() => setMode("basic")}
+              className={`flex-1 flex justify-center items-center gap-2 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                mode === "basic" ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              基本
+            </button>
+            <button
+              onClick={() => setMode("proactive")}
+              className={`flex-1 flex justify-center items-center gap-2 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                mode === "proactive" ? "bg-white text-amber-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              積極
+            </button>
+          </div>
+
+          {/* 迷你進度條 (黏在底部邊緣) */}
+          <div className="absolute bottom-0 left-0 w-full h-1 bg-slate-200">
+            <div 
+              className={`h-full transition-all duration-700 ease-out ${
+                mode === "basic" ? "bg-teal-500" : "bg-amber-500"
+              }`}
+              style={{ width: `${progressPercent}%` }}
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      {/* =========================================
+          🌿 底層：完整版 Normal Header (自然滾動，不吸頂、不變形)
+          ========================================= */}
       <div className="pt-6 px-5 mb-2">
         <h1 className="text-2xl font-bold text-slate-800 tracking-tight">防災準備</h1>
         <p className="text-sm text-slate-500 mt-1 mb-4">急難救助包檢核表</p>
 
-        <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl shadow-sm">
+        {/* 說明框 */}
+        <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl shadow-sm mb-4">
           <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
           <p className="text-[13px] text-slate-600 leading-relaxed">
             {mode === "basic" 
@@ -147,17 +192,9 @@ export default function PreparednessPage() {
               : "目標：應對長期斷網斷電、封鎖或居家「就地掩蔽」，以維持 1~2 週生存與較高自救能力為原則。"}
           </p>
         </div>
-      </div>
 
-      {/* 2. 吸頂區塊 (移除 JS 動畫，純靠 CSS 處理) */}
-      <div 
-        className={`sticky top-0 z-20 px-5 transition-all duration-300 ease-in-out ${
-          isScrolled 
-            ? "pt-3 pb-3 bg-white/95 shadow-sm border-b border-slate-200/50" 
-            : "pt-1 pb-2 bg-[#f8fafc] border-transparent"
-        }`}
-      >
-        <div className="flex bg-slate-200/60 p-1 rounded-xl shadow-inner mb-0">
+        {/* 完整版雙模式切換 */}
+        <div className="flex bg-slate-200/60 p-1 rounded-xl shadow-inner mb-4">
           <button
             onClick={() => setMode("basic")}
             className={`flex-1 flex justify-center items-center gap-2 py-2 text-sm font-bold rounded-lg transition-all ${
@@ -176,51 +213,35 @@ export default function PreparednessPage() {
           </button>
         </div>
 
-        {/* 進度條容器：使用 CSS 過場調整內距與背景 */}
-        <div className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
-            isScrolled
-              ? "bg-transparent border-transparent shadow-none px-1 py-0 mt-3 rounded-none" 
-              : "bg-white border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] px-4 py-4 mt-4 rounded-2xl" 
-          }`}
-        >
-          {/* 【黑科技：CSS Grid 折疊】 頂部文字區塊 */}
-          <div className={`grid transition-all duration-300 ease-in-out ${
-            isScrolled ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
-          }`}>
-            <div className="overflow-hidden flex justify-between items-end mb-2">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                {mode === "basic" ? "基本準備進度" : "積極準備進度"}
-              </span>
-              <span className={`text-xl font-black ${mode === "basic" ? "text-teal-600" : "text-amber-500"}`}>
-                {progressPercent}%
-              </span>
-            </div>
+        {/* 完整版進度條卡片 */}
+        <div className="bg-white border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4 rounded-2xl">
+          <div className="flex justify-between items-end mb-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              {mode === "basic" ? "基本準備進度" : "積極準備進度"}
+            </span>
+            <span className={`text-xl font-black ${mode === "basic" ? "text-teal-600" : "text-amber-500"}`}>
+              {progressPercent}%
+            </span>
           </div>
-
-          {/* 進度條本體：純 CSS 過場 */}
-          <div className={`w-full bg-slate-100 rounded-full overflow-hidden transition-all duration-300 ${isScrolled ? "h-1" : "h-2.5"}`}>
+          <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
             <div 
-              className={`rounded-full transition-all duration-700 ease-out ${
+              className={`h-2.5 rounded-full transition-all duration-700 ease-out ${
                 mode === "basic" ? "bg-teal-500" : "bg-amber-500"
-              } ${isScrolled ? "h-1" : "h-2.5"}`}
+              }`}
               style={{ width: `${progressPercent}%` }}
             ></div>
           </div>
-          
-          {/* 【黑科技：CSS Grid 折疊】 底部文字區塊 */}
-          <div className={`grid transition-all duration-300 ease-in-out ${
-            isScrolled ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
-          }`}>
-            <div className="overflow-hidden text-right mt-2">
-              <p className="text-[11px] font-medium text-slate-400">
-                已完成 {completedItems} / {totalItems} 項
-              </p>
-            </div>
+          <div className="text-right mt-2">
+            <p className="text-[11px] font-medium text-slate-400">
+              已完成 {completedItems} / {totalItems} 項
+            </p>
           </div>
         </div>
       </div>
 
-      {/* 3. 清單內容區域 */}
+      {/* =========================================
+          📦 清單內容區域 (保持不變)
+          ========================================= */}
       <main className="px-5 pt-3 pb-5 space-y-5">
         {checklistData.map((category) => {
           const CategoryIcon = category.icon;
