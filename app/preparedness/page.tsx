@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-// 引入高效能的 useScroll 與 useMotionValueEvent
-import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion";
+import { useScroll, useMotionValueEvent } from "framer-motion";
 import { 
   CheckCircle2, Circle, FileText, Droplet, 
   BriefcaseMedical, Wrench, Shirt, AlertCircle,
   Backpack, ShieldAlert, Info
 } from "lucide-react";
 
-// --- (checklistData 保持原樣，這裡為了版面簡潔不重複貼出，請保留你原本的 checklistData) ---
+// --- 急難救助包清單資料 ---
 const checklistData = [
   {
     categoryId: "docs",
@@ -98,10 +97,9 @@ export default function PreparednessPage() {
   
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // 【效能大升級】使用 Framer Motion 原生的滾動監聽器 (跳過 React 笨重的渲染週期)
+  // 保持 Framer Motion 高效能的監聽，但不使用它來做 DOM 的排版動畫
   const { scrollY } = useScroll();
   useMotionValueEvent(scrollY, "change", (latest) => {
-    // 只有在狀態需要改變時才觸發 React 更新，減少無謂的渲染
     if (latest > 40 && !isScrolled) setIsScrolled(true);
     if (latest <= 40 && isScrolled) setIsScrolled(false);
   });
@@ -151,15 +149,14 @@ export default function PreparednessPage() {
         </div>
       </div>
 
-      {/* 2. 吸頂區塊 (移除會干擾的 layout 屬性，改用純 CSS 過場) */}
+      {/* 2. 吸頂區塊 (移除 JS 動畫，純靠 CSS 處理) */}
       <div 
         className={`sticky top-0 z-20 px-5 transition-all duration-300 ease-in-out ${
           isScrolled 
-            ? "pt-3 pb-3 bg-white/95 shadow-sm border-b border-slate-200/50" // 移除 backdrop-blur 減輕 GPU 負擔
+            ? "pt-3 pb-3 bg-white/95 shadow-sm border-b border-slate-200/50" 
             : "pt-1 pb-2 bg-[#f8fafc] border-transparent"
         }`}
       >
-        {/* 切換開關 */}
         <div className="flex bg-slate-200/60 p-1 rounded-xl shadow-inner mb-0">
           <button
             onClick={() => setMode("basic")}
@@ -179,34 +176,28 @@ export default function PreparednessPage() {
           </button>
         </div>
 
-        {/* 進度條容器：改用 AnimatePresence 包裝會折疊的文字區塊，進度條本身用原生 CSS 過場 */}
+        {/* 進度條容器：使用 CSS 過場調整內距與背景 */}
         <div className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
             isScrolled
-              ? "bg-transparent border-transparent shadow-none px-1 mt-3" 
-              : "bg-white border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4 mt-4 rounded-2xl" 
+              ? "bg-transparent border-transparent shadow-none px-1 py-0 mt-3 rounded-none" 
+              : "bg-white border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] px-4 py-4 mt-4 rounded-2xl" 
           }`}
         >
-          {/* 頂部文字區塊 */}
-          <AnimatePresence>
-            {!isScrolled && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2, ease: "easeInOut" }}
-                className="flex justify-between items-end mb-2 overflow-hidden"
-              >
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                  {mode === "basic" ? "基本準備進度" : "積極準備進度"}
-                </span>
-                <span className={`text-xl font-black ${mode === "basic" ? "text-teal-600" : "text-amber-500"}`}>
-                  {progressPercent}%
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* 【黑科技：CSS Grid 折疊】 頂部文字區塊 */}
+          <div className={`grid transition-all duration-300 ease-in-out ${
+            isScrolled ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+          }`}>
+            <div className="overflow-hidden flex justify-between items-end mb-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                {mode === "basic" ? "基本準備進度" : "積極準備進度"}
+              </span>
+              <span className={`text-xl font-black ${mode === "basic" ? "text-teal-600" : "text-amber-500"}`}>
+                {progressPercent}%
+              </span>
+            </div>
+          </div>
 
-          {/* 進度條本體：不靠 Framer，直接用 CSS transition 最穩 */}
+          {/* 進度條本體：純 CSS 過場 */}
           <div className={`w-full bg-slate-100 rounded-full overflow-hidden transition-all duration-300 ${isScrolled ? "h-1" : "h-2.5"}`}>
             <div 
               className={`rounded-full transition-all duration-700 ease-out ${
@@ -216,26 +207,20 @@ export default function PreparednessPage() {
             ></div>
           </div>
           
-          {/* 底部文字區塊 */}
-          <AnimatePresence>
-            {!isScrolled && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2, ease: "easeInOut" }}
-                className="mt-2 text-right overflow-hidden"
-              >
-                <p className="text-[11px] font-medium text-slate-400">
-                  已完成 {completedItems} / {totalItems} 項
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* 【黑科技：CSS Grid 折疊】 底部文字區塊 */}
+          <div className={`grid transition-all duration-300 ease-in-out ${
+            isScrolled ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+          }`}>
+            <div className="overflow-hidden text-right mt-2">
+              <p className="text-[11px] font-medium text-slate-400">
+                已完成 {completedItems} / {totalItems} 項
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 3. 清單內容區域 (保持不變) */}
+      {/* 3. 清單內容區域 */}
       <main className="px-5 pt-3 pb-5 space-y-5">
         {checklistData.map((category) => {
           const CategoryIcon = category.icon;
