@@ -1,197 +1,131 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, MapPin, Clock, AlertTriangle, Info, History } from "lucide-react";
-import EarthquakeMap from "@/components/EarthquakeMap"; // 引入我們剛剛做的地圖組件
-
-// --- 模擬地震資料庫 (未來會由後端 API 取代) ---
-const mockEarthquakes = [
-  {
-    id: "eq-001",
-    time: "2026-03-13 18:42:15",
-    location: "花蓮縣政府南南東方 25.4 公里 (位於臺灣東部海域)",
-    epicenter: { lng: 121.65, lat: 23.85 },
-    magnitude: 6.2,
-    depth: 15.5,
-    isMajor: true,
-  },
-  {
-    id: "eq-002",
-    time: "2026-03-13 14:12:05",
-    location: "宜蘭縣政府南南東方 38.4 公里 (位於臺灣東部海域)",
-    epicenter: { lng: 121.85, lat: 24.45 },
-    magnitude: 4.8,
-    depth: 22.0,
-    isMajor: false,
-  },
-  {
-    id: "eq-003",
-    time: "2026-03-12 09:30:22",
-    location: "嘉義縣政府東南東方 18.2 公里 (位於嘉義縣中埔鄉)",
-    epicenter: { lng: 120.45, lat: 23.35 },
-    magnitude: 3.9,
-    depth: 8.5,
-    isMajor: false,
-  },
-  {
-    id: "eq-004",
-    time: "2026-03-10 22:15:40",
-    location: "花蓮縣政府西南西方 15.2 公里 (位於花蓮縣壽豐鄉)",
-    epicenter: { lng: 121.5, lat: 23.9 },
-    magnitude: 5.1,
-    depth: 12.0,
-    isMajor: true,
-  }
-];
+import { Activity, MapPin, Clock, AlertTriangle, Radio, CheckCircle2 } from "lucide-react";
+import TaiwanCountyMap from "@/components/TaiwanCountyMap";
+import { mockFormalReport } from "@/lib/earthquakeData";
 
 export default function EarthquakePage() {
-  // 狀態：目前選中要顯示在地圖上的地震 (預設為最新的一筆)
-  const [selectedQuake, setSelectedQuake] = useState(mockEarthquakes[0]);
+  // 控制狀態：目前是「EEW 速報期」還是「正式報告期」
+  const [reportStage, setReportStage] = useState<"EEW" | "FORMAL">("EEW");
 
-  // 動態視覺主題：依據規模大小決定卡片顏色
-  const getTheme = (mag: number) => {
-    if (mag >= 5.5) return { bg: "bg-rose-50", text: "text-rose-600", border: "border-rose-200", badge: "bg-rose-500", ring: "ring-rose-500/20" };
-    if (mag >= 4.5) return { bg: "bg-amber-50", text: "text-amber-600", border: "border-amber-200", badge: "bg-amber-500", ring: "ring-amber-500/20" };
-    return { bg: "bg-teal-50", text: "text-teal-600", border: "border-teal-200", badge: "bg-teal-500", ring: "ring-teal-500/20" };
-  };
-
-  const currentTheme = getTheme(selectedQuake.magnitude);
+  // 如果是 EEW 期，我們不傳入 intensities，地圖會保持全灰
+  const currentIntensities = reportStage === "FORMAL" ? mockFormalReport.intensities : undefined;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-24">
       
-      {/* 頂部 Header */}
-      <header className="pt-6 px-5 pb-4 bg-white border-b border-slate-100 sticky top-0 z-20 shadow-sm">
-        <div className="flex justify-between items-start mb-2">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">地震資訊</h1>
-            <p className="text-sm text-slate-500 mt-1">即時測報與震度熱力圖</p>
-          </div>
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full shadow-sm">
-            <Activity size={12} className="text-slate-400" />
-            <span className="text-[10px] font-bold text-slate-500 tracking-wide">系統連線中</span>
-          </div>
+      <header className="pt-6 px-5 pb-4 bg-white border-b border-slate-100 sticky top-0 z-20 shadow-sm flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">地震資訊</h1>
+          <p className="text-sm text-slate-500 mt-1">氣象署即時測報整合</p>
         </div>
+        
+        {/* 測試用切換按鈕 (模擬時間推移) */}
+        <button 
+          onClick={() => setReportStage(prev => prev === "EEW" ? "FORMAL" : "EEW")}
+          className="bg-slate-100 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+        >
+          切換狀態: {reportStage}
+        </button>
       </header>
 
       <main className="px-5 pt-5 space-y-5">
         
-        {/* 1. 最新/選中地震資訊卡 (Hero Card) */}
-        <section className={`p-5 rounded-3xl border shadow-sm transition-colors duration-500 ${currentTheme.bg} ${currentTheme.border}`}>
+        {/* 1. 動態資訊卡片 (依據報告階段改變樣式) */}
+        <section className={`p-5 rounded-3xl border shadow-sm transition-all duration-500 ${
+          reportStage === "EEW" ? "bg-amber-50 border-amber-200" : "bg-white border-slate-200"
+        }`}>
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-2">
-              <span className={`flex h-3 w-3 relative`}>
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${currentTheme.badge}`}></span>
-                <span className={`relative inline-flex rounded-full h-3 w-3 ${currentTheme.badge}`}></span>
-              </span>
-              <span className={`text-xs font-bold uppercase tracking-wider ${currentTheme.text}`}>
-                {selectedQuake.id === mockEarthquakes[0].id ? "最新測報" : "歷史紀錄"}
-              </span>
+              {reportStage === "EEW" ? (
+                <>
+                  <span className="flex h-3 w-3 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                  </span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-600 flex items-center gap-1">
+                    <Radio size={14} /> EEW 電腦速報
+                  </span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={16} className="text-teal-500" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                    CWA 正式報告
+                  </span>
+                </>
+              )}
             </div>
             <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-              <Clock size={12} /> {selectedQuake.time.split(" ")[1]}
+              <Clock size={12} /> {mockFormalReport.time.split(" ")[1]}
             </span>
           </div>
 
           <div className="flex items-end gap-4 mb-4">
             <div>
-              <p className="text-xs text-slate-500 font-bold mb-0.5">芮氏規模 (M)</p>
-              <p className={`text-5xl font-black tracking-tighter ${currentTheme.text}`}>
-                {selectedQuake.magnitude.toFixed(1)}
+              <p className="text-xs text-slate-500 font-bold mb-0.5">初步規模 (M)</p>
+              <p className="text-5xl font-black tracking-tighter text-slate-800">
+                {mockFormalReport.magnitude.toFixed(1)}
               </p>
             </div>
             <div className="pb-1">
               <p className="text-xs text-slate-500 font-bold mb-0.5">深度</p>
-              <p className="text-xl font-bold text-slate-700">{selectedQuake.depth} <span className="text-xs font-medium text-slate-500">km</span></p>
+              <p className="text-xl font-bold text-slate-700">{mockFormalReport.depth} <span className="text-xs font-medium text-slate-500">km</span></p>
             </div>
           </div>
 
-          <div className="flex items-start gap-2 bg-white/60 p-3 rounded-xl border border-white/50">
-            <MapPin size={16} className={`${currentTheme.text} shrink-0 mt-0.5`} />
+          <div className="flex items-start gap-2 bg-white/60 p-3 rounded-xl border border-black/5">
+            <MapPin size={16} className="text-slate-500 shrink-0 mt-0.5" />
             <p className="text-[13px] font-medium text-slate-700 leading-snug">
-              {selectedQuake.location}
+              {mockFormalReport.epicenter}
             </p>
           </div>
+          
+          {/* EEW 專屬警語 */}
+          {reportStage === "EEW" && (
+            <p className="mt-3 text-[11px] text-amber-600 font-bold animate-pulse">
+              * 電腦初步運算結果，各地實際震度彙整中，請保持警戒。
+            </p>
+          )}
         </section>
 
-        {/* 2. 核心：動態地形熱力圖 (Map Section) */}
+        {/* 2. 縣市震度面量圖 (Choropleth Map) */}
         <section className="bg-white p-5 rounded-3xl shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-slate-100">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-2">
             <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
               <Activity size={16} className="text-teal-600" />
-              震波擴散推估圖
+              各地最大震度
             </h2>
-            <button className="text-[10px] text-slate-400 flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-              <Info size={12} /> 電腦自動運算
-            </button>
           </div>
 
-          {/* 渲染我們自訂的 Canvas 熱力圖 */}
-          <div className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50 mb-4">
-            <EarthquakeMap 
-              epicenter={selectedQuake.epicenter} 
-              magnitude={selectedQuake.magnitude} 
-            />
+          {/* 地圖元件 */}
+          <div className="bg-slate-50/50 rounded-2xl border border-slate-100/50 mb-4 relative overflow-hidden">
+             {/* 如果是 EEW，蓋上一層半透明遮罩 */}
+             {reportStage === "EEW" && (
+              <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center">
+                <Radio size={24} className="text-slate-400 animate-bounce mb-2" />
+                <span className="text-xs font-bold text-slate-500">等待各地測站數據回傳...</span>
+              </div>
+            )}
+            <TaiwanCountyMap intensities={currentIntensities} />
           </div>
 
-          {/* 震度色階圖例 (Legend) */}
-          <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
-            <span className="text-[10px] font-bold text-slate-400">震度色階</span>
-            <div className="flex gap-1.5">
-              <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-teal-400 opacity-80"></span><span className="text-[9px] text-slate-500">1-2</span></div>
-              <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-yellow-400 opacity-80"></span><span className="text-[9px] text-slate-500">3</span></div>
-              <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-400 opacity-80"></span><span className="text-[9px] text-slate-500">4</span></div>
-              <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500 opacity-80"></span><span className="text-[9px] text-slate-500">5+</span></div>
+          {/* 3. 官方 CWA 10 級色階圖例 (正確版) */}
+          <div className="bg-slate-50 px-3 py-3 rounded-xl border border-slate-100 flex flex-col gap-2">
+            <span className="text-[10px] font-bold text-slate-400">氣象署 10 級震度色階</span>
+            <div className="grid grid-cols-4 gap-2">
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#86efac]"></span><span className="text-[10px] font-medium text-slate-600">1-2</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#fde047]"></span><span className="text-[10px] font-medium text-slate-600">3</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#fb923c]"></span><span className="text-[10px] font-medium text-slate-600">4</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#ef4444]"></span><span className="text-[10px] font-medium text-slate-600">5弱</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#b91c1c]"></span><span className="text-[10px] font-medium text-slate-600">5強</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#78350f]"></span><span className="text-[10px] font-medium text-slate-600">6弱</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#6b21a8]"></span><span className="text-[10px] font-medium text-slate-600">6強</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#1e1b4b]"></span><span className="text-[10px] font-medium text-slate-600">7</span></div>
             </div>
           </div>
         </section>
-
-        {/* 3. 近期地震紀錄 (History List) */}
-        <section>
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 ml-1">
-            <History size={14} /> 近期顯著地震
-          </h3>
-          <div className="space-y-3">
-            {mockEarthquakes.map((quake) => {
-              const isSelected = selectedQuake.id === quake.id;
-              const theme = getTheme(quake.magnitude);
-              
-              return (
-                <div 
-                  key={quake.id}
-                  onClick={() => setSelectedQuake(quake)}
-                  className={`p-3 rounded-2xl border cursor-pointer transition-all duration-300 flex items-center justify-between ${
-                    isSelected 
-                      ? `bg-white shadow-md ${theme.border} ring-2 ${theme.ring}` 
-                      : "bg-white shadow-[0_2px_8px_rgb(0,0,0,0.02)] border-slate-100 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center gap-3 w-full overflow-hidden">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${
-                      isSelected ? `${theme.badge} text-white` : "bg-slate-100 text-slate-600"
-                    }`}>
-                      {quake.magnitude.toFixed(1)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`font-bold text-[13px] truncate ${isSelected ? "text-slate-800" : "text-slate-600"}`}>
-                        {quake.location.split("(")[0]}
-                      </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{quake.time.split(" ")[0]} {quake.time.split(" ")[1]}</p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* 底部免責聲明 */}
-        <div className="bg-slate-100/50 border border-slate-200 p-4 rounded-2xl flex gap-3 mt-4 mb-2">
-          <AlertTriangle className="text-slate-400 shrink-0 mt-0.5" size={16} />
-          <p className="text-[11px] text-slate-500 leading-relaxed">
-            此頁面顯示之震度熱力圖為電腦依據震央與規模進行之物理衰減與場址效應推估，並非實際觀測值。精確災情請以中央氣象署發布之正式報告為準。
-          </p>
-        </div>
 
       </main>
     </div>
