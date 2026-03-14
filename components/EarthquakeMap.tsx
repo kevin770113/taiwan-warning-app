@@ -14,60 +14,55 @@ export default function EarthquakeMap({ epicenter, magnitude }: EarthquakeMapPro
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
     const width = 200;
     const height = 400;
-    // 建立空的像素資料陣列
     const imageData = ctx.createImageData(width, height);
     const data = imageData.data;
 
-    // 取得震央的畫布座標
     const centerPx = getPixelCoords(epicenter.lng, epicenter.lat);
 
-    // 震度轉顏色的輔助函式 (從透明青綠 -> 黃 -> 橘 -> 紅)
     const getColor = (intensity: number) => {
-      if (intensity < 1) return [20, 184, 166, 0]; // 透明
-      if (intensity < 2) return [20, 184, 166, 80]; // Teal (震度 1-2)
-      if (intensity < 3) return [250, 204, 21, 150]; // Yellow (震度 3)
-      if (intensity < 4) return [249, 115, 22, 200]; // Orange (震度 4)
-      return [244, 63, 94, 230]; // Rose (震度 5+)
+      // 微調色階：讓底色過渡更柔和自然
+      if (intensity < 1) return [0, 0, 0, 0];
+      if (intensity < 2) return [134, 239, 172, 100]; // 淺綠
+      if (intensity < 3) return [253, 224, 71, 180]; // 黃色
+      if (intensity < 4) return [251, 146, 60, 220]; // 橘色
+      if (intensity < 5) return [244, 63, 94, 240];  // 玫瑰紅
+      return [159, 18, 57, 255]; // 深紅 (5強以上)
     };
 
-    // 遍歷畫布上的每一個像素 (這就是 GPU 級的渲染邏輯)
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        // 1. 計算該像素與震央的距離 (簡單用畫素距離當比例)
         const dx = x - centerPx.x;
         const dy = y - centerPx.y;
         const distPx = Math.sqrt(dx * dx + dy * dy);
         
-        // 2. 基礎震波衰減公式 (模擬物理現象：規模越大初始越強，距離越遠越弱)
-        // 這是一個簡化版的視覺公式，讓規模 6 的地震大約能擴散半個台灣
-        let baseIntensity = (magnitude * 1.5) - (distPx * 0.03);
+        let baseIntensity = (magnitude * 1.6) - (distPx * 0.035);
         if (baseIntensity < 0) baseIntensity = 0;
 
-        // 3. 場址效應 (Site Effects) 修正：判斷該像素是否在地質特異區
         let siteMultiplier = 1.0;
-        // (為了效能，這裡用畫布座標粗略推算影響範圍)
+        
+        // 矩陣交互計算：疊加多個地形的影響
         SITE_EFFECTS.forEach(site => {
           const sitePx = getPixelCoords(site.lng, site.lat);
           const sdx = x - sitePx.x;
           const sdy = y - sitePx.y;
           const sDist = Math.sqrt(sdx * sdx + sdy * sdy);
-          // 如果像素在該地形的影響半徑內，加上權重變化
+          
           if (sDist < site.radiusKm) {
-            // 越靠近地形中心，地形效應越明顯 (線性遞減)
-            const effectRatio = 1 - (sDist / site.radiusKm);
+            // 使用更平滑的餘弦遞減公式 (Cosine Interpolation) 取代線性，邊緣融合更自然
+            const effectRatio = (Math.cos(Math.PI * (sDist / site.radiusKm)) + 1) / 2;
             siteMultiplier += (site.weight - 1.0) * effectRatio;
           }
         });
 
-        // 4. 算出最終的修正震度
+        // 限制最大與最小乘數，避免異常極值
+        siteMultiplier = Math.max(0.5, Math.min(siteMultiplier, 1.8));
         const finalIntensity = baseIntensity * siteMultiplier;
 
-        // 5. 填入 rgba 像素資料
         const [r, g, b, a] = getColor(finalIntensity);
         const index = (y * width + x) * 4;
         data[index] = r;
@@ -77,21 +72,24 @@ export default function EarthquakeMap({ epicenter, magnitude }: EarthquakeMapPro
       }
     }
 
-    // 將算好的像素資料一次性畫上 Canvas
     ctx.putImageData(imageData, 0, 0);
   }, [epicenter, magnitude]);
 
   return (
-    <div className="relative w-full max-w-[240px] mx-auto flex justify-center items-center drop-shadow-md">
+    <div className="relative w-full max-w-[240px] mx-auto flex justify-center items-center">
       
-      {/* 底圖輪廓 (淡灰色) */}
-      <svg viewBox="0 0 200 400" className="absolute top-0 left-0 w-full h-full text-slate-200">
-        <path d={TAIWAN_SVG_PATH} fill="currentColor" stroke="#e2e8f0" strokeWidth="2" />
+      {/* 立體陰影層：為台灣地圖增加微微的海軍藍立體浮雕感 */}
+      <svg viewBox="0 0 200 400" className="absolute top-[2px] left-[2px] w-full h-full text-slate-300/50 blur-[2px]">
+        <path d={TAIWAN_SVG_PATH} fill="currentColor" />
       </svg>
 
-      {/* 核心魔法：使用 CSS 的 clip-path
-        這會把正方形的 Canvas 精準地沿著台灣的邊界裁切！
-        海的部分不會有顏色，漸層只會出現在陸地上。
+      {/* 乾淨的底圖輪廓 */}
+      <svg viewBox="0 0 200 400" className="absolute top-0 left-0 w-full h-full text-slate-100">
+        <path d={TAIWAN_SVG_PATH} fill="currentColor" stroke="#cbd5e1" strokeWidth="1.5" />
+      </svg>
+
+      {/* 高斯模糊與色彩增值混合 (mix-blend-multiply)：
+          這是讓熱力圖「消除像素感」並擁有高級氣象渲染圖質感的魔法！
       */}
       <div 
         className="w-full h-full relative"
@@ -101,19 +99,19 @@ export default function EarthquakeMap({ epicenter, magnitude }: EarthquakeMapPro
           ref={canvasRef}
           width={200}
           height={400}
-          className="w-full h-auto opacity-90"
+          // 這裡加上了 blur-[6px] 讓邊界完全柔化，mix-blend 讓色彩滲透到底圖上
+          className="w-full h-auto opacity-85 blur-[6px] mix-blend-multiply"
           style={{ width: '100%', height: '100%' }}
         />
       </div>
 
-      {/* 震央標記 🌟 (疊加在最上層) */}
+      {/* 震央標記 🌟 */}
       {(() => {
         const px = getPixelCoords(epicenter.lng, epicenter.lat);
-        // 確保震央落在畫面內才顯示
-        if (px.x >= 0 && px.x <= 200 && px.y >= 0 && px.y <= 400) {
+        if (px.x >= -10 && px.x <= 210 && px.y >= -10 && px.y <= 410) {
           return (
             <div 
-              className="absolute w-4 h-4 rounded-full border-2 border-white bg-rose-500 animate-ping flex items-center justify-center shadow-lg"
+              className="absolute w-5 h-5 rounded-full border-[2.5px] border-white bg-rose-500 animate-pulse flex items-center justify-center shadow-[0_0_15px_rgba(244,63,94,0.6)]"
               style={{ 
                 left: `${(px.x / 200) * 100}%`, 
                 top: `${(px.y / 400) * 100}%`,
