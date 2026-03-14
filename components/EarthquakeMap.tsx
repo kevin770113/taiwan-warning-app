@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { TAIWAN_COORDS, getProjectedCoords, SITE_EFFECTS } from "@/lib/taiwanGeo";
+import { TAIWAN_SVG_PATH, getPixelCoords, SITE_EFFECTS } from "@/lib/taiwanGeo";
 
 interface EarthquakeMapProps {
   epicenter: { lng: number; lat: number };
@@ -14,13 +14,18 @@ export default function EarthquakeMap({ epicenter, magnitude }: EarthquakeMapPro
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
     const width = 240;
     const height = 400;
 
-    // 1. 建立離線畫布 (Offscreen Canvas) 來計算純像素熱力數據
+    // 清空主畫布
+    ctx.clearRect(0, 0, width, height);
+
+    // ==========================================
+    // 1. 在離線畫布計算熱力矩陣 (Offscreen Canvas)
+    // ==========================================
     const offCanvas = document.createElement('canvas');
     offCanvas.width = width;
     offCanvas.height = height;
@@ -29,15 +34,19 @@ export default function EarthquakeMap({ epicenter, magnitude }: EarthquakeMapPro
 
     const imageData = offCtx.createImageData(width, height);
     const data = imageData.data;
-    const centerPx = getProjectedCoords(epicenter.lng, epicenter.lat, width, height);
+    const centerPx = getPixelCoords(epicenter.lng, epicenter.lat);
 
+    // 嚴格遵守 CWA 官方新制 10 級色階
     const getColor = (intensity: number) => {
-      if (intensity < 1) return [0, 0, 0, 0];
-      if (intensity < 2) return [134, 239, 172, 100]; // 淺綠
-      if (intensity < 3) return [253, 224, 71, 180]; // 黃
-      if (intensity < 4) return [251, 146, 60, 220]; // 橘
-      if (intensity < 5) return [244, 63, 94, 240];  // 紅
-      return [159, 18, 57, 255]; // 深紅
+      if (intensity < 0.5) return [0, 0, 0, 0];
+      if (intensity < 2.5) return [134, 239, 172, 140]; // 1-2級: 綠
+      if (intensity < 3.5) return [250, 204, 21, 180];  // 3級: 黃
+      if (intensity < 4.5) return [249, 115, 22, 200];  // 4級: 橘
+      if (intensity < 5.0) return [239, 68, 68, 220];   // 5弱: 淺紅
+      if (intensity < 5.5) return [185, 28, 28, 230];   // 5強: 深紅
+      if (intensity < 6.0) return [120, 53, 15, 240];   // 6弱: 深棕
+      if (intensity < 6.5) return [107, 33, 168, 250];  // 6強: 深紫
+      return [30, 27, 75, 255];                         // 7級: 紫黑
     };
 
     for (let y = 0; y < height; y++) {
@@ -46,24 +55,35 @@ export default function EarthquakeMap({ epicenter, magnitude }: EarthquakeMapPro
         const dy = y - centerPx.y;
         const distPx = Math.sqrt(dx * dx + dy * dy);
         
-        let baseIntensity = (magnitude * 1.6) - (distPx * 0.035);
+        // 【核心修正】: 對數衰減模型 (Logarithmic Attenuation)
+        // 更符合真實震波：近距離衰減極快，遠距離衰減平緩
+        let baseIntensity = (1.2 * magnitude) - (1.8 * Math.log10(distPx + 5)) + 1.5;
         if (baseIntensity < 0) baseIntensity = 0;
 
-        let siteMultiplier = 1.0;
+        // 【核心修正】: 獨立高斯場址效應 (消除突兀斑塊)
+        let maxMultiplier = 1.0;
+        let minMultiplier = 1.0;
+        
         SITE_EFFECTS.forEach(site => {
-          const sitePx = getProjectedCoords(site.lng, site.lat, width, height);
+          const sitePx = getPixelCoords(site.lng, site.lat);
           const sdx = x - sitePx.x;
           const sdy = y - sitePx.y;
           const sDist = Math.sqrt(sdx * sdx + sdy * sdy);
           
-          if (sDist < site.radiusKm) {
-            const effectRatio = (Math.cos(Math.PI * (sDist / site.radiusKm)) + 1) / 2;
-            siteMultiplier += (site.weight - 1.0) * effectRatio;
+          if (sDist < site.radiusKm * 1.5) {
+            // 使用高斯常態分佈鐘形曲線 (Gaussian Bell Curve)
+            const strength = Math.exp(-(sDist * sDist) / (2 * (site.radiusKm/2) * (site.radiusKm/2)));
+            if (site.weight > 1) {
+              const localMult = 1 + (site.weight - 1) * strength;
+              if (localMult > maxMultiplier) maxMultiplier = localMult;
+            } else {
+              const localMult = 1 - (1 - site.weight) * strength;
+              if (localMult < minMultiplier) minMultiplier = localMult;
+            }
           }
         });
 
-        siteMultiplier = Math.max(0.5, Math.min(siteMultiplier, 1.8));
-        const finalIntensity = baseIntensity * siteMultiplier;
+        const finalIntensity = baseIntensity * (maxMultiplier * minMultiplier);
 
         const [r, g, b, a] = getColor(finalIntensity);
         const index = (y * width + x) * 4;
@@ -76,56 +96,45 @@ export default function EarthquakeMap({ epicenter, magnitude }: EarthquakeMapPro
     offCtx.putImageData(imageData, 0, 0);
 
     // ==========================================
-    // 2. 主畫布繪製 (絕對精準的輪廓對齊與裁切)
+    // 2. 主畫布原生裁切渲染 (徹底解決對不齊與溢出)
     // ==========================================
-    ctx.clearRect(0, 0, width, height);
+    const taiwanPath = new Path2D(TAIWAN_SVG_PATH);
 
-    // 建立台灣輪廓路徑
-    const taiwanPath = new Path2D();
-    TAIWAN_COORDS.forEach((coord, index) => {
-      const px = getProjectedCoords(coord[0], coord[1], width, height);
-      if (index === 0) taiwanPath.moveTo(px.x, px.y);
-      else taiwanPath.lineTo(px.x, px.y);
-    });
-    taiwanPath.closePath();
-
-    // 儲存乾淨的畫布狀態
-    ctx.save();
-
-    // 畫上海島底色
-    ctx.fillStyle = "#f8fafc";
-    ctx.fill(taiwanPath);
-
-    // 【魔法發生處】：將畫布的繪圖區域「鎖死」在台灣輪廓內
-    ctx.clip(taiwanPath);
-
-    // 在輪廓內畫上熱力圖，並套用高斯模糊讓色塊柔和
-    ctx.filter = "blur(8px)";
+    // 畫上熱力圖 (並加上一點模糊讓色塊平滑)
+    ctx.filter = "blur(6px)";
     ctx.drawImage(offCanvas, 0, 0);
 
-    // 解除鎖死狀態
-    ctx.restore();
+    // 【魔法】: globalCompositeOperation 裁切
+    // 這行指令會讓畫布「只保留與 taiwanPath 重疊的部分」，完美消除外海顏色
+    ctx.filter = "none";
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.fill(taiwanPath);
 
-    // 畫上銳利、完美貼合的外框線
-    ctx.strokeStyle = "#cbd5e1";
-    ctx.lineWidth = 1.5;
+    // 恢復正常繪圖模式，疊加上乾淨的外框與底色
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.fillStyle = "#f8fafc"; // 陸地底色
+    ctx.fill(taiwanPath);
+
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = "#cbd5e1"; // 海岸線
+    ctx.lineWidth = 1.2;
     ctx.stroke(taiwanPath);
 
   }, [epicenter, magnitude]);
 
   return (
-    <div className="relative w-full max-w-[240px] mx-auto flex justify-center items-center drop-shadow-sm">
+    <div className="relative w-full max-w-[240px] mx-auto flex justify-center items-center">
       <canvas
         ref={canvasRef}
         width={240}
         height={400}
-        className="w-full h-auto"
+        className="w-full h-auto drop-shadow-sm"
         style={{ width: '100%', height: '100%' }}
       />
       
-      {/* 震央標記 🌟 */}
+      {/* 震央標記 */}
       {(() => {
-        const px = getProjectedCoords(epicenter.lng, epicenter.lat, 240, 400);
+        const px = getPixelCoords(epicenter.lng, epicenter.lat);
         return (
           <div 
             className="absolute w-4 h-4 rounded-full border-[2px] border-white bg-rose-500 animate-pulse flex items-center justify-center shadow-md pointer-events-none"
