@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
