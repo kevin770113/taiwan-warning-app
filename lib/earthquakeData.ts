@@ -15,13 +15,19 @@ export const getIntensityColor = (intensity: string) => {
   }
 };
 
+// 🌟 新增：終極字體翻譯蒟蒻 (消滅「臺」與「台」的差異)
+export const normalizeName = (name: string) => {
+  if (!name) return "";
+  return name.replace(/臺/g, "台");
+};
+
 export const normalizeCountyName = (topoName: string) => {
-  if (!topoName) return "";
+  const n = normalizeName(topoName);
   const mapping: Record<string, string> = {
     "台北縣": "新北市", "桃園縣": "桃園市", "台中縣": "台中市", 
     "台南縣": "台南市", "高雄縣": "高雄市",
   };
-  return mapping[topoName] || topoName;
+  return mapping[n] || n;
 };
 
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -35,8 +41,9 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
   return R * c;
 };
 
+// 🌟 修正：物理公式大進化 (強化距離衰減 -3.2，確保震央永遠最紅)
 export const calculateEEWIntensity = (distance: number, magnitude: number, vs30: number) => {
-  let baseI = 1.2 * magnitude - 2.5 * Math.log10(distance + 15) + 2.5;
+  let baseI = 1.3 * magnitude - 3.2 * Math.log10(distance + 10) + 1.0;
 
   if (vs30 < 250) baseI += 1.0;      
   else if (vs30 < 400) baseI += 0.5; 
@@ -75,11 +82,9 @@ export const fetchLatestEarthquake = async (): Promise<EarthquakeReport> => {
         epicenterCoords: [121.67, 23.77], 
         magnitude: 7.2,
         depth: 15.5,
-        // 🌟 展示「鄉鎮市區」智能對接的火力！
-        // 我們混搭了「縣市」與「特定鄉鎮」的數據，看看地圖有多聰明
         intensities: {
           "花蓮縣": "6弱",
-          "花蓮市": "6強", // 特定鄉鎮會覆蓋縣市顏色
+          "花蓮市": "6強", 
           "壽豐鄉": "6強",
           "吉安鄉": "5強",
           "宜蘭縣": "5強", 
