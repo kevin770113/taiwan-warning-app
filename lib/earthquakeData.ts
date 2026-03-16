@@ -16,6 +16,7 @@ export const getIntensityColor = (intensity: string) => {
 };
 
 export const normalizeCountyName = (topoName: string) => {
+  if (!topoName) return "";
   const mapping: Record<string, string> = {
     "台北縣": "新北市", "桃園縣": "桃園市", "台中縣": "台中市", 
     "台南縣": "台南市", "高雄縣": "高雄市",
@@ -23,7 +24,6 @@ export const normalizeCountyName = (topoName: string) => {
   return mapping[topoName] || topoName;
 };
 
-// 🌟 新增：計算兩座標距離 (公里) - Haversine Formula
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; 
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -35,15 +35,12 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
   return R * c;
 };
 
-// 🌟 新增：GMPE 地動衰減方程式 (導入 Vs30 場址效應)
 export const calculateEEWIntensity = (distance: number, magnitude: number, vs30: number) => {
-  // 基礎對數衰減 (距離越遠掉越快)
   let baseI = 1.2 * magnitude - 2.5 * Math.log10(distance + 15) + 2.5;
 
-  // 場址效應放大 (Site Effect)
-  if (vs30 < 250) baseI += 1.0;      // 軟泥盆地 (極度放大)
-  else if (vs30 < 400) baseI += 0.5; // 沖積平原 (中度放大)
-  else if (vs30 > 600) baseI -= 0.5; // 堅硬岩盤 (衰減)
+  if (vs30 < 250) baseI += 1.0;      
+  else if (vs30 < 400) baseI += 0.5; 
+  else if (vs30 > 600) baseI -= 0.5; 
 
   if (baseI < 0) return "0";
   if (baseI < 2.5) return "2";
@@ -78,12 +75,30 @@ export const fetchLatestEarthquake = async (): Promise<EarthquakeReport> => {
         epicenterCoords: [121.67, 23.77], 
         magnitude: 7.2,
         depth: 15.5,
+        // 🌟 展示「鄉鎮市區」智能對接的火力！
+        // 我們混搭了「縣市」與「特定鄉鎮」的數據，看看地圖有多聰明
         intensities: {
-          "花蓮縣": "6強", "宜蘭縣": "5強", "苗栗縣": "5強", "台中市": "5弱",
-          "彰化縣": "5弱", "新竹縣": "5弱", "南投縣": "5弱", "桃園市": "5弱",
-          "新北市": "5弱", "台北市": "5弱", "台東縣": "4", "嘉義縣": "4",
-          "雲林縣": "4", "高雄市": "4", "嘉義市": "4", "新竹市": "4",
-          "台南市": "4", "基隆市": "4", "屏東縣": "4", "澎湖縣": "3"
+          "花蓮縣": "6弱",
+          "花蓮市": "6強", // 特定鄉鎮會覆蓋縣市顏色
+          "壽豐鄉": "6強",
+          "吉安鄉": "5強",
+          "宜蘭縣": "5強", 
+          "南澳鄉": "6弱",
+          "新北市": "5弱", 
+          "新店區": "5強",
+          "信義區": "4",
+          "大安區": "4",
+          "台中市": "5弱",
+          "和平區": "5強",
+          "彰化縣": "5弱", 
+          "桃園市": "5弱",
+          "台北市": "5弱", 
+          "台東縣": "4", 
+          "嘉義縣": "4",
+          "雲林縣": "4", 
+          "高雄市": "4", 
+          "台南市": "4", 
+          "屏東縣": "4", 
         }
       });
     }, 600);
