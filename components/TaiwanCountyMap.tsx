@@ -1,37 +1,39 @@
 // @ts-nocheck
 "use client";
 
-import { ComposableMap, Geographies, Geography } from "react-simple-maps";
-import { getIntensityColor } from "@/lib/earthquakeData";
+import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
+import { getIntensityColor, normalizeCountyName } from "@/lib/earthquakeData";
 
 interface TaiwanCountyMapProps {
   intensities?: Record<string, string>;
+  epicenterCoords?: [number, number]; // 接收震央座標
 }
 
-// 這裡指向你剛剛上傳到 public 的檔案名稱
+// 確保這裡的檔名跟你 public 資料夾裡的一模一樣
 const geoUrl = "/taiwan-topo.json";
 
-export default function TaiwanCountyMap({ intensities = {} }: TaiwanCountyMapProps) {
-  const getFillColor = (countyName: string) => {
-    const intensity = intensities[countyName];
+export default function TaiwanCountyMap({ intensities = {}, epicenterCoords }: TaiwanCountyMapProps) {
+  
+  const getFillColor = (topoName: string) => {
+    // 1. 先用翻譯蒟蒻把舊名字換成新名字 (解決白色破洞)
+    const modernName = normalizeCountyName(topoName);
+    // 2. 拿新名字去對應震度
+    const intensity = intensities[modernName];
     return getIntensityColor(intensity || "0");
   };
 
   return (
-    <div className="w-full max-w-[320px] mx-auto drop-shadow-sm flex justify-center items-center">
-      {/* 設定台灣的中心經緯度與縮放比例 */}
+    <div className="w-full max-w-[320px] mx-auto drop-shadow-sm flex justify-center items-center overflow-hidden">
+      {/* scale 從 7500 放大到 9200，center 微調到 120.8, 23.7 讓台灣完美置中 */}
       <ComposableMap 
         projection="geoMercator" 
-        projectionConfig={{ scale: 7500, center: [120.5, 23.6] }}
+        projectionConfig={{ scale: 9200, center: [120.8, 23.7] }}
         style={{ width: "100%", height: "auto" }}
       >
-        {/* 自動解析你上傳的 TopoJSON 檔案 */}
         <Geographies geography={geoUrl}>
           {({ geographies }) =>
             geographies.map((geo) => {
-              // 你的檔案裡有 geo.properties.name (例如："台北市")
               const countyName = geo.properties.name;
-              
               return (
                 <Geography
                   key={geo.rsmKey}
@@ -40,7 +42,7 @@ export default function TaiwanCountyMap({ intensities = {} }: TaiwanCountyMapPro
                   stroke="#ffffff"
                   strokeWidth={1}
                   style={{
-                    default: { outline: "none", transition: "all 0.5s" },
+                    default: { outline: "none", transition: "fill 0.5s ease" },
                     hover: { filter: "brightness(0.9)", outline: "none" },
                     pressed: { outline: "none" },
                   }}
@@ -49,6 +51,16 @@ export default function TaiwanCountyMap({ intensities = {} }: TaiwanCountyMapPro
             })
           }
         </Geographies>
+
+        {/* 震央標記：如果有傳入座標，就畫出紅色脈衝圓圈 */}
+        {epicenterCoords && (
+          <Marker coordinates={epicenterCoords}>
+            {/* 動畫外圈 (雷達波紋) */}
+            <circle r={10} fill="#ef4444" className="animate-ping opacity-60" />
+            {/* 實體內圈 */}
+            <circle r={4} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
+          </Marker>
+        )}
       </ComposableMap>
     </div>
   );
