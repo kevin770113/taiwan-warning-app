@@ -62,11 +62,9 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
     return "#e2e8f0"; 
   };
 
-  // 🌟 神級引擎：純手工 IDW (反距離權重) 空間內插演算法
   const idwGrid = useMemo(() => {
     if (!epicenterCoords || vs30Data.length === 0 || reportStage !== "EEW") return [];
 
-    // 1. 先算出 464 個已知地質點的「絕對 PGA 數值」
     const basePoints = vs30Data.map(point => {
       const [lon, lat, vs30] = point;
       const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
@@ -75,30 +73,29 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
     });
 
     const grid = [];
-    const step = 0.04; // 網格細緻度 (越小越細，0.04 是手機效能與視覺的完美平衡)
-    const searchRadiusSq = 0.25; // IDW 影響半徑 (平方值)
+    // 🌟 提高解析度：將網格變細緻到 0.03
+    const step = 0.03; 
+    const searchRadiusSq = 0.2; 
 
-    // 2. 鋪設 4000+ 像素網格，涵蓋全台灣
     for (let lon = 119.9; lon <= 122.1; lon += step) {
       for (let lat = 21.8; lat <= 25.4; lat += step) {
         let sumWeight = 0;
         let sumValue = 0;
 
-        // 3. 吸收周圍已知測站的 PGA
         for (let i = 0; i < basePoints.length; i++) {
           const bp = basePoints[i];
           const dx = bp.lon - lon;
           const dy = bp.lat - lat;
           const distSq = dx * dx + dy * dy;
 
-          if (distSq < 0.00001) { // 剛好在測站正上方
+          if (distSq < 0.00001) {
             sumValue = bp.pga;
             sumWeight = 1;
             break;
           }
 
           if (distSq < searchRadiusSq) {
-            const w = 1 / distSq; // 距離平方反比權重
+            const w = 1 / distSq;
             sumWeight += w;
             sumValue += bp.pga * w;
           }
@@ -144,13 +141,21 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           </mask>
         </defs>
 
-        {/* 1. 底層：EEW IDW 無縫連續熱力漸層 (完全消滅網格破綻) */}
+        {/* 🌟 視覺終極進化：
+            1. 將 opacity=0.85 移到 <g> 層級，徹底消滅交疊的魚鱗疊影。
+            2. 使用 <rect> 取代 <circle>，模擬完美的 Canvas 像素矩陣。 
+        */}
         {reportStage === "EEW" && epicenterCoords && idwGrid.length > 0 && (
-          <g mask="url(#taiwan-mask)">
+          <g mask="url(#taiwan-mask)" opacity={0.85}>
             {idwGrid.map((pt, index) => (
               <Marker key={index} coordinates={[pt.lon, pt.lat]}>
-                {/* 13 單位的半徑能讓 0.04 的網格完美交疊，形成無縫色塊 */}
-                <circle r={13} fill={pt.color} opacity={0.85} stroke="none" />
+                {/* 完美像素塊：寬高 7x7，偏移 -3.5 置中，並用微小的 stroke 填補抗鋸齒縫隙 */}
+                <rect 
+                  x={-3.5} y={-3.5} width={7} height={7} 
+                  fill={pt.color} 
+                  stroke={pt.color} 
+                  strokeWidth={0.5} 
+                />
               </Marker>
             ))}
           </g>
