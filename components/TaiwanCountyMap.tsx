@@ -12,13 +12,14 @@ interface TaiwanCountyMapProps {
   epicenterCoords?: [number, number];
 }
 
-// 🌟 修正了致命的烏龍：移除了 .topo，這才是真正的檔案路徑！
 const geoUrl = "https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.json";
 
 export default function TaiwanCountyMap({ reportStage, magnitude, intensities = {}, epicenterCoords }: TaiwanCountyMapProps) {
   const [vs30Data, setVs30Data] = useState<[number, number, number][]>([]);
+  const [pureTownsTopo, setPureTownsTopo] = useState<any>(null);
 
   useEffect(() => {
+    // 1. 抓取 Vs30 熱力網格資料
     fetch("/vs30_grid.json")
       .then(res => {
         if (!res.ok) throw new Error("Try uppercase");
@@ -27,22 +28,48 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
       .catch(() => fetch("/Vs30_grid.json").then(res => res.json()))
       .then(data => setVs30Data(data))
       .catch(err => console.error("Failed to load Vs30 grid", err));
+
+    // 🌟 2. 終極拓撲隔離魔法：手動抓取地圖，並把除了鄉鎮以外的圖層全部在記憶體中摧毀
+    fetch(geoUrl)
+      .then(res => res.json())
+      .then(data => {
+        if (data.objects && data.objects.towns) {
+          setPureTownsTopo({
+            ...data,
+            objects: { towns: data.objects.towns } // 強制只保留鄉鎮物件
+          });
+        } else {
+          setPureTownsTopo(data);
+        }
+      })
+      .catch(err => console.error("Failed to load TopoJSON", err));
   }, []);
 
+  // 🌟 三段式嚴謹字串配對演算法 (解決同名但尾碼不同的問題)
   const getFillColor = (countyName: string, townName: string) => {
     const modernCounty = normalizeCountyName(countyName);
     const modernTown = normalizeName(townName);
-    const intensity = intensities[modernTown] || intensities[modernCounty];
-    
-    if (!intensity || intensity === "0") return "#e2e8f0"; 
-    return getIntensityColor(intensity);
+
+    // 第一階段：完全命中 (例: 信義區 === 信義區)
+    if (intensities[modernTown]) return getIntensityColor(intensities[modernTown]);
+
+    // 第二階段：去尾碼比對 (例: 桃園市[區] === 桃園市[縣轄市])
+    const strippedTown = modernTown.replace(/[鄉鎮市區]$/, "");
+    const matchKey = Object.keys(intensities).find(k => k.replace(/[鄉鎮市區]$/, "") === strippedTown);
+    if (matchKey) return getIntensityColor(intensities[matchKey]);
+
+    // 第三階段：繼承縣市最大震度
+    if (intensities[modernCounty]) return getIntensityColor(intensities[modernCounty]);
+
+    return "#e2e8f0"; // 無資料
   };
 
   const heartbeatMaxR = Math.max(25, magnitude * 7);
 
+  if (!pureTownsTopo) return null; // 等待地圖載入
+
   return (
     <div className="w-full max-w-[340px] mx-auto drop-shadow-sm flex justify-center items-center overflow-hidden">
-      
       <ComposableMap 
         projection="geoMercator" 
         projectionConfig={{ scale: 8500, center: [121.0, 23.65] }}
@@ -51,22 +78,20 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
         style={{ width: "100%", height: "auto", backgroundColor: reportStage === "EEW" ? "#f8fafc" : "transparent" }}
       >
         <defs>
-          <mask id="taiwan-mask">
+          {/* 🌟 終極鎖死座標系：加入 maskUnits="userSpaceOnUse" 確保反向遮罩絕對不飄移 */}
+          <mask id="taiwan-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="600">
             <rect x="-1000" y="-1000" width="3000" height="3000" fill="black" />
-            <Geographies geography={geoUrl}>
+            <Geographies geography={pureTownsTopo}>
               {({ geographies }) =>
-                geographies
-                  // 🌟 致命攔截：過濾掉會把台灣蓋住的「國界」與「縣市」大圖塊
-                  .filter(geo => geo.properties && geo.properties.TOWNNAME)
-                  .map((geo) => (
-                    <Geography key={geo.rsmKey} geography={geo} fill="white" />
-                  ))
+                geographies.map((geo) => (
+                  <Geography key={geo.rsmKey} geography={geo} fill="white" />
+                ))
               }
             </Geographies>
           </mask>
         </defs>
 
-        {/* 1. 底層：EEW 真實地質熱力點 (不規則場址效應，完美裁切) */}
+        {/* 1. 底層：EEW PGA 物理熱力雲 (被鎖死的 Mask 完美裁切) */}
         {reportStage === "EEW" && epicenterCoords && vs30Data.length > 0 && (
           <g mask="url(#taiwan-mask)">
             {vs30Data.map((point, index) => {
@@ -86,33 +111,30 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           </g>
         )}
 
-        {/* 2. 中層：現代版 368 鄉鎮實體地圖 */}
-        <Geographies geography={geoUrl}>
+        {/* 2. 中層：368 鄉鎮實體地圖 (三段式填色) */}
+        <Geographies geography={pureTownsTopo}>
           {({ geographies }) =>
-            geographies
-              // 🌟 再次攔截：只畫有鄉鎮名稱的區塊，不畫疊加的大區塊
-              .filter(geo => geo.properties && geo.properties.TOWNNAME)
-              .map((geo) => {
-                const isEEW = reportStage === "EEW";
-                const props = geo.properties;
-                const countyName = props.COUNTYNAME || "";
-                const townName = props.TOWNNAME || "";
+            geographies.map((geo) => {
+              const isEEW = reportStage === "EEW";
+              const props = geo.properties;
+              const countyName = props.COUNTYNAME || props.COUNTY || props.C_Name || "";
+              const townName = props.TOWNNAME || props.TOWN || props.T_Name || "";
 
-                return (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    fill={isEEW ? "transparent" : getFillColor(countyName, townName)}
-                    stroke={isEEW ? "#94a3b8" : "#ffffff"}
-                    strokeWidth={isEEW ? 0.6 : 0.3}
-                    style={{
-                      default: { outline: "none", transition: "fill 0.5s ease" },
-                      hover: { outline: "none", filter: isEEW ? "none" : "brightness(0.9)" },
-                      pressed: { outline: "none" },
-                    }}
-                  />
-                );
-              })
+              return (
+                <Geography
+                  key={geo.rsmKey}
+                  geography={geo}
+                  fill={isEEW ? "transparent" : getFillColor(countyName, townName)}
+                  stroke={isEEW ? "#94a3b8" : "#ffffff"}
+                  strokeWidth={isEEW ? 0.6 : 0.3}
+                  style={{
+                    default: { outline: "none", transition: "fill 0.5s ease" },
+                    hover: { outline: "none", filter: isEEW ? "none" : "brightness(0.9)" },
+                    pressed: { outline: "none" },
+                  }}
+                />
+              );
+            })
           }
         </Geographies>
 
