@@ -12,7 +12,8 @@ interface TaiwanCountyMapProps {
   epicenterCoords?: [number, number];
 }
 
-const geoUrl = "https://raw.githubusercontent.com/g0v/twgeojson/master/json/twTown1982.topo.json";
+// 🌟 升級版圖資：使用 2010 年後的現代行政區劃 (包含信義區等現代區域)
+const geoUrl = "https://raw.githubusercontent.com/g0v/twgeojson/master/json/twTown2010.topo.json";
 
 export default function TaiwanCountyMap({ reportStage, magnitude, intensities = {}, epicenterCoords }: TaiwanCountyMapProps) {
   const [vs30Data, setVs30Data] = useState<[number, number, number][]>([]);
@@ -29,7 +30,7 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
   }, []);
 
   const getFillColor = (countyName: string, townName: string) => {
-    // 🌟 透過 normalizeName 先把圖資裡的「臺」全部轉成「台」
+    // 🌟 多重屬性名稱防呆 (因應不同圖資可能使用的欄位名稱不同)
     const modernCounty = normalizeCountyName(countyName);
     const modernTown = normalizeName(townName);
     const intensity = intensities[modernTown] || intensities[modernCounty];
@@ -51,15 +52,11 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
         style={{ width: "100%", height: "auto", backgroundColor: reportStage === "EEW" ? "#f8fafc" : "transparent" }}
       >
         <defs>
-          <filter id="heatmap-blur" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="6" />
-          </filter>
-
-          {/* 🌟 終極裁切魔法：SVG 反向遮罩 */}
+          {/* 🌟 終極裁切魔法：絕對不偏移的 SVG 反向遮罩 (捨棄 Filter，根除位移 Bug) */}
           <mask id="taiwan-mask">
-            {/* 黑底：代表遮蔽所有東西 */}
-            <rect x="0" y="0" width="400" height="600" fill="black" />
-            {/* 白底：將台灣陸地挖洞，讓底層熱力透出來 */}
+            {/* 黑底：這塊巨大的黑布會遮蔽所有超出台灣範圍的東西 */}
+            <rect x="-1000" y="-1000" width="3000" height="3000" fill="black" />
+            {/* 白底：用真實的台灣輪廓在黑布上「挖出透光的洞」 */}
             <Geographies geography={geoUrl}>
               {({ geographies }) =>
                 geographies.map((geo) => (
@@ -70,35 +67,37 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           </mask>
         </defs>
 
-        {/* 1. 底層：EEW 高解析熱力雲 (套用模糊與 mask 完美裁切) */}
+        {/* 1. 底層：EEW 真實地質熱力點 (移除 Blur，讓點自然交疊展現不規則的 Vs30 地形，並套用裁切) */}
         {reportStage === "EEW" && epicenterCoords && vs30Data.length > 0 && (
           <g mask="url(#taiwan-mask)">
-            <g filter="url(#heatmap-blur)">
-              {vs30Data.map((point, index) => {
-                const [lon, lat, vs30] = point;
-                const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
-                const estIntensity = calculateEEWIntensity(dist, magnitude, vs30);
-                const color = getIntensityColor(estIntensity);
-                
-                if (color === "#f1f5f9") return null;
+            {vs30Data.map((point, index) => {
+              const [lon, lat, vs30] = point;
+              const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
+              const estIntensity = calculateEEWIntensity(dist, magnitude, vs30);
+              const color = getIntensityColor(estIntensity);
+              
+              if (color === "#f1f5f9") return null;
 
-                return (
-                  <Marker key={index} coordinates={[lon, lat]}>
-                    <circle r={12} fill={color} opacity={0.9} />
-                  </Marker>
-                );
-              })}
-            </g>
+              return (
+                <Marker key={index} coordinates={[lon, lat]}>
+                  {/* 將半徑稍微放大到 14，使圓點邊緣互相重疊，產生無模糊的有機斑塊 */}
+                  <circle r={14} fill={color} opacity={0.85} />
+                </Marker>
+              );
+            })}
           </g>
         )}
 
-        {/* 2. 中層：368 鄉鎮實體地圖 */}
+        {/* 2. 中層：現代版 368 鄉鎮實體地圖 */}
         <Geographies geography={geoUrl}>
           {({ geographies }) =>
             geographies.map((geo) => {
               const isEEW = reportStage === "EEW";
-              const countyName = geo.properties.COUNTYNAME;
-              const townName = geo.properties.TOWNNAME;
+              
+              // 🌟 屬性防呆：自動抓取正確的欄位名稱 (COUNTYNAME / TOWNNAME 等)
+              const props = geo.properties;
+              const countyName = props.COUNTYNAME || props.COUNTY || props.C_Name || "";
+              const townName = props.TOWNNAME || props.TOWN || props.T_Name || "";
 
               return (
                 <Geography
@@ -118,7 +117,7 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           }
         </Geographies>
 
-        {/* 3. 頂層：震央心跳動畫 */}
+        {/* 3. 頂層：震央心跳動畫 (這次絕不會再跟熱力雲分開了) */}
         {epicenterCoords && (
           <Marker coordinates={epicenterCoords}>
             <circle r="0" fill="none" stroke="#ef4444" strokeWidth="2.5">
