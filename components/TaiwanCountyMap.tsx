@@ -21,6 +21,20 @@ interface TaiwanCountyMapProps {
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.json";
 
+// 🌟 幾何碰撞演算法：判斷兩條線段是否交叉 (射線追蹤用)
+const ccw = (A: number[], B: number[], C: number[]) => {
+  return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0]);
+};
+const checkIntersection = (A: number[], B: number[], C: number[], D: number[]) => {
+  return ccw(A, C, D) !== ccw(B, C, D) && ccw(A, B, C) !== ccw(A, B, D);
+};
+
+// 🌟 建立「虛擬中央山脈」脊線 (北從宜蘭大同，中經合歡山，南至大武山)
+const cmrSegments = [
+  [[121.5, 24.5], [121.1, 23.8]], 
+  [[121.1, 23.8], [120.7, 22.5]]  
+];
+
 export default function TaiwanCountyMap({ reportStage, magnitude, intensities = {}, epicenterCoords }: TaiwanCountyMapProps) {
   const [vs30Data, setVs30Data] = useState<[number, number, number][]>([]);
   const [pureTownsTopo, setPureTownsTopo] = useState<any>(null);
@@ -65,18 +79,37 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
   const idwGrid = useMemo(() => {
     if (!epicenterCoords || vs30Data.length === 0 || reportStage !== "EEW") return [];
 
+    // 1. 計算 464 個基礎地質點的 PGA，並在此處「啟動山脈屏障攔截」
     const basePoints = vs30Data.map(point => {
       const [lon, lat, vs30] = point;
       const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
-      const pga = calculatePGA(dist, magnitude, vs30);
+      let pga = calculatePGA(dist, magnitude, vs30);
+
+      // 🌟 山脈屏障射線檢測：如果地震波穿過中央山脈，能量強制大幅衰減！
+      const epicPt = [epicenterCoords[0], epicenterCoords[1]];
+      const targetPt = [lon, lat];
+      let crossed = false;
+      
+      for (const seg of cmrSegments) {
+        if (checkIntersection(epicPt, targetPt, seg[0], seg[1])) {
+          crossed = true;
+          break;
+        }
+      }
+
+      // 如果穿越山脈，PGA 削弱剩下 35% (高度阻擋效應)
+      if (crossed) {
+        pga *= 0.35; 
+      }
+
       return { lon, lat, pga };
     });
 
     const grid = [];
-    // 🌟 提高解析度：將網格變細緻到 0.03
     const step = 0.03; 
     const searchRadiusSq = 0.2; 
 
+    // 2. IDW 空間內插
     for (let lon = 119.9; lon <= 122.1; lon += step) {
       for (let lat = 21.8; lat <= 25.4; lat += step) {
         let sumWeight = 0;
@@ -141,17 +174,14 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           </mask>
         </defs>
 
-        {/* 🌟 視覺終極進化：
-            1. 將 opacity=0.85 移到 <g> 層級，徹底消滅交疊的魚鱗疊影。
-            2. 使用 <rect> 取代 <circle>，模擬完美的 Canvas 像素矩陣。 
-        */}
+        {/* 1. 底層：EEW 連續熱力漸層 */}
         {reportStage === "EEW" && epicenterCoords && idwGrid.length > 0 && (
           <g mask="url(#taiwan-mask)" opacity={0.85}>
             {idwGrid.map((pt, index) => (
               <Marker key={index} coordinates={[pt.lon, pt.lat]}>
-                {/* 完美像素塊：寬高 7x7，偏移 -3.5 置中，並用微小的 stroke 填補抗鋸齒縫隙 */}
+                {/* 🌟 紗窗效應修復：寬高從 7 加大到 10，強制邊緣重疊，消滅微小縫隙！ */}
                 <rect 
-                  x={-3.5} y={-3.5} width={7} height={7} 
+                  x={-5} y={-5} width={10} height={10} 
                   fill={pt.color} 
                   stroke={pt.color} 
                   strokeWidth={0.5} 
