@@ -1,9 +1,16 @@
 // @ts-nocheck
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
-import { getIntensityColor, normalizeCountyName, normalizeName, calculateDistance, calculateEEWIntensity } from "@/lib/earthquakeData";
+import { 
+  getIntensityColor, 
+  normalizeCountyName, 
+  normalizeName, 
+  calculateDistance, 
+  calculatePGA, 
+  getIntensityFromPGA 
+} from "@/lib/earthquakeData";
 
 interface TaiwanCountyMapProps {
   reportStage: "EEW" | "FORMAL";
@@ -19,7 +26,6 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
   const [pureTownsTopo, setPureTownsTopo] = useState<any>(null);
 
   useEffect(() => {
-    // 1. 抓取 Vs30 熱力網格資料
     fetch("/vs30_grid.json")
       .then(res => {
         if (!res.ok) throw new Error("Try uppercase");
@@ -29,15 +35,11 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
       .then(data => setVs30Data(data))
       .catch(err => console.error("Failed to load Vs30 grid", err));
 
-    // 🌟 2. 終極拓撲隔離魔法：手動抓取地圖，並把除了鄉鎮以外的圖層全部在記憶體中摧毀
     fetch(geoUrl)
       .then(res => res.json())
       .then(data => {
         if (data.objects && data.objects.towns) {
-          setPureTownsTopo({
-            ...data,
-            objects: { towns: data.objects.towns } // 強制只保留鄉鎮物件
-          });
+          setPureTownsTopo({ ...data, objects: { towns: data.objects.towns } });
         } else {
           setPureTownsTopo(data);
         }
@@ -45,28 +47,80 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
       .catch(err => console.error("Failed to load TopoJSON", err));
   }, []);
 
-  // 🌟 三段式嚴謹字串配對演算法 (解決同名但尾碼不同的問題)
   const getFillColor = (countyName: string, townName: string) => {
     const modernCounty = normalizeCountyName(countyName);
     const modernTown = normalizeName(townName);
 
-    // 第一階段：完全命中 (例: 信義區 === 信義區)
     if (intensities[modernTown]) return getIntensityColor(intensities[modernTown]);
 
-    // 第二階段：去尾碼比對 (例: 桃園市[區] === 桃園市[縣轄市])
     const strippedTown = modernTown.replace(/[鄉鎮市區]$/, "");
     const matchKey = Object.keys(intensities).find(k => k.replace(/[鄉鎮市區]$/, "") === strippedTown);
     if (matchKey) return getIntensityColor(intensities[matchKey]);
 
-    // 第三階段：繼承縣市最大震度
     if (intensities[modernCounty]) return getIntensityColor(intensities[modernCounty]);
 
-    return "#e2e8f0"; // 無資料
+    return "#e2e8f0"; 
   };
+
+  // 🌟 神級引擎：純手工 IDW (反距離權重) 空間內插演算法
+  const idwGrid = useMemo(() => {
+    if (!epicenterCoords || vs30Data.length === 0 || reportStage !== "EEW") return [];
+
+    // 1. 先算出 464 個已知地質點的「絕對 PGA 數值」
+    const basePoints = vs30Data.map(point => {
+      const [lon, lat, vs30] = point;
+      const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
+      const pga = calculatePGA(dist, magnitude, vs30);
+      return { lon, lat, pga };
+    });
+
+    const grid = [];
+    const step = 0.04; // 網格細緻度 (越小越細，0.04 是手機效能與視覺的完美平衡)
+    const searchRadiusSq = 0.25; // IDW 影響半徑 (平方值)
+
+    // 2. 鋪設 4000+ 像素網格，涵蓋全台灣
+    for (let lon = 119.9; lon <= 122.1; lon += step) {
+      for (let lat = 21.8; lat <= 25.4; lat += step) {
+        let sumWeight = 0;
+        let sumValue = 0;
+
+        // 3. 吸收周圍已知測站的 PGA
+        for (let i = 0; i < basePoints.length; i++) {
+          const bp = basePoints[i];
+          const dx = bp.lon - lon;
+          const dy = bp.lat - lat;
+          const distSq = dx * dx + dy * dy;
+
+          if (distSq < 0.00001) { // 剛好在測站正上方
+            sumValue = bp.pga;
+            sumWeight = 1;
+            break;
+          }
+
+          if (distSq < searchRadiusSq) {
+            const w = 1 / distSq; // 距離平方反比權重
+            sumWeight += w;
+            sumValue += bp.pga * w;
+          }
+        }
+
+        if (sumWeight > 0) {
+          const finalPga = sumValue / sumWeight;
+          const intensity = getIntensityFromPGA(finalPga);
+          const color = getIntensityColor(intensity);
+          
+          if (color !== "#f1f5f9") {
+            grid.push({ lon, lat, color });
+          }
+        }
+      }
+    }
+    return grid;
+  }, [vs30Data, epicenterCoords, magnitude, reportStage]);
 
   const heartbeatMaxR = Math.max(25, magnitude * 7);
 
-  if (!pureTownsTopo) return null; // 等待地圖載入
+  if (!pureTownsTopo) return null; 
 
   return (
     <div className="w-full max-w-[340px] mx-auto drop-shadow-sm flex justify-center items-center overflow-hidden">
@@ -78,7 +132,6 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
         style={{ width: "100%", height: "auto", backgroundColor: reportStage === "EEW" ? "#f8fafc" : "transparent" }}
       >
         <defs>
-          {/* 🌟 終極鎖死座標系：加入 maskUnits="userSpaceOnUse" 確保反向遮罩絕對不飄移 */}
           <mask id="taiwan-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="600">
             <rect x="-1000" y="-1000" width="3000" height="3000" fill="black" />
             <Geographies geography={pureTownsTopo}>
@@ -91,27 +144,19 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           </mask>
         </defs>
 
-        {/* 1. 底層：EEW PGA 物理熱力雲 (被鎖死的 Mask 完美裁切) */}
-        {reportStage === "EEW" && epicenterCoords && vs30Data.length > 0 && (
+        {/* 1. 底層：EEW IDW 無縫連續熱力漸層 (完全消滅網格破綻) */}
+        {reportStage === "EEW" && epicenterCoords && idwGrid.length > 0 && (
           <g mask="url(#taiwan-mask)">
-            {vs30Data.map((point, index) => {
-              const [lon, lat, vs30] = point;
-              const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
-              const estIntensity = calculateEEWIntensity(dist, magnitude, vs30);
-              const color = getIntensityColor(estIntensity);
-              
-              if (color === "#f1f5f9") return null;
-
-              return (
-                <Marker key={index} coordinates={[lon, lat]}>
-                  <circle r={14} fill={color} opacity={0.85} />
-                </Marker>
-              );
-            })}
+            {idwGrid.map((pt, index) => (
+              <Marker key={index} coordinates={[pt.lon, pt.lat]}>
+                {/* 13 單位的半徑能讓 0.04 的網格完美交疊，形成無縫色塊 */}
+                <circle r={13} fill={pt.color} opacity={0.85} stroke="none" />
+              </Marker>
+            ))}
           </g>
         )}
 
-        {/* 2. 中層：368 鄉鎮實體地圖 (三段式填色) */}
+        {/* 2. 中層：368 鄉鎮實體地圖 */}
         <Geographies geography={pureTownsTopo}>
           {({ geographies }) =>
             geographies.map((geo) => {
