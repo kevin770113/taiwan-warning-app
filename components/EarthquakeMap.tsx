@@ -1,153 +1,154 @@
+// @ts-nocheck
 "use client";
 
-import { useEffect, useRef } from "react";
-import { TAIWAN_SVG_PATH, getPixelCoords, SITE_EFFECTS } from "@/lib/taiwanGeo";
+import { useState, useEffect } from "react";
+import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
+import { getIntensityColor, normalizeCountyName, normalizeName, calculateDistance, calculateEEWIntensity } from "@/lib/earthquakeData";
 
-interface EarthquakeMapProps {
-  epicenter: { lng: number; lat: number };
+interface TaiwanCountyMapProps {
+  reportStage: "EEW" | "FORMAL";
   magnitude: number;
+  intensities?: Record<string, string>;
+  epicenterCoords?: [number, number];
 }
 
-export default function EarthquakeMap({ epicenter, magnitude }: EarthquakeMapProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+const geoUrl = "https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.json";
+
+export default function TaiwanCountyMap({ reportStage, magnitude, intensities = {}, epicenterCoords }: TaiwanCountyMapProps) {
+  const [vs30Data, setVs30Data] = useState<[number, number, number][]>([]);
+  const [pureTownsTopo, setPureTownsTopo] = useState<any>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return;
+    fetch("/vs30_grid.json")
+      .then(res => {
+        if (!res.ok) throw new Error("Try uppercase");
+        return res.json();
+      })
+      .catch(() => fetch("/Vs30_grid.json").then(res => res.json()))
+      .then(data => setVs30Data(data))
+      .catch(err => console.error("Failed to load Vs30 grid", err));
 
-    const width = 240;
-    const height = 400;
+    fetch(geoUrl)
+      .then(res => res.json())
+      .then(data => {
+        if (data.objects && data.objects.towns) {
+          setPureTownsTopo({
+            ...data,
+            objects: { towns: data.objects.towns }
+          });
+        } else {
+          setPureTownsTopo(data);
+        }
+      })
+      .catch(err => console.error("Failed to load TopoJSON", err));
+  }, []);
 
-    // 清空主畫布
-    ctx.clearRect(0, 0, width, height);
+  const getFillColor = (countyName: string, townName: string) => {
+    const modernCounty = normalizeCountyName(countyName);
+    const modernTown = normalizeName(townName);
 
-    // ==========================================
-    // 1. 在離線畫布計算熱力矩陣 (Offscreen Canvas)
-    // ==========================================
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = width;
-    offCanvas.height = height;
-    const offCtx = offCanvas.getContext("2d");
-    if (!offCtx) return;
+    if (intensities[modernTown]) return getIntensityColor(intensities[modernTown]);
 
-    const imageData = offCtx.createImageData(width, height);
-    const data = imageData.data;
-    const centerPx = getPixelCoords(epicenter.lng, epicenter.lat);
+    const strippedTown = modernTown.replace(/[鄉鎮市區]$/, "");
+    const matchKey = Object.keys(intensities).find(k => k.replace(/[鄉鎮市區]$/, "") === strippedTown);
+    if (matchKey) return getIntensityColor(intensities[matchKey]);
 
-    // 嚴格遵守 CWA 官方新制 10 級色階
-    const getColor = (intensity: number) => {
-      if (intensity < 0.5) return [0, 0, 0, 0];
-      if (intensity < 2.5) return [134, 239, 172, 140]; // 1-2級: 綠
-      if (intensity < 3.5) return [250, 204, 21, 180];  // 3級: 黃
-      if (intensity < 4.5) return [249, 115, 22, 200];  // 4級: 橘
-      if (intensity < 5.0) return [239, 68, 68, 220];   // 5弱: 淺紅
-      if (intensity < 5.5) return [185, 28, 28, 230];   // 5強: 深紅
-      if (intensity < 6.0) return [120, 53, 15, 240];   // 6弱: 深棕
-      if (intensity < 6.5) return [107, 33, 168, 250];  // 6強: 深紫
-      return [30, 27, 75, 255];                         // 7級: 紫黑
-    };
+    if (intensities[modernCounty]) return getIntensityColor(intensities[modernCounty]);
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const dx = x - centerPx.x;
-        const dy = y - centerPx.y;
-        const distPx = Math.sqrt(dx * dx + dy * dy);
-        
-        // 【核心修正】: 對數衰減模型 (Logarithmic Attenuation)
-        // 更符合真實震波：近距離衰減極快，遠距離衰減平緩
-        let baseIntensity = (1.2 * magnitude) - (1.8 * Math.log10(distPx + 5)) + 1.5;
-        if (baseIntensity < 0) baseIntensity = 0;
+    return "#e2e8f0"; 
+  };
 
-        // 【核心修正】: 獨立高斯場址效應 (消除突兀斑塊)
-        let maxMultiplier = 1.0;
-        let minMultiplier = 1.0;
-        
-        SITE_EFFECTS.forEach(site => {
-          const sitePx = getPixelCoords(site.lng, site.lat);
-          const sdx = x - sitePx.x;
-          const sdy = y - sitePx.y;
-          const sDist = Math.sqrt(sdx * sdx + sdy * sdy);
-          
-          if (sDist < site.radiusKm * 1.5) {
-            // 使用高斯常態分佈鐘形曲線 (Gaussian Bell Curve)
-            const strength = Math.exp(-(sDist * sDist) / (2 * (site.radiusKm/2) * (site.radiusKm/2)));
-            if (site.weight > 1) {
-              const localMult = 1 + (site.weight - 1) * strength;
-              if (localMult > maxMultiplier) maxMultiplier = localMult;
-            } else {
-              const localMult = 1 - (1 - site.weight) * strength;
-              if (localMult < minMultiplier) minMultiplier = localMult;
-            }
-          }
-        });
+  const heartbeatMaxR = Math.max(25, magnitude * 7);
 
-        const finalIntensity = baseIntensity * (maxMultiplier * minMultiplier);
-
-        const [r, g, b, a] = getColor(finalIntensity);
-        const index = (y * width + x) * 4;
-        data[index] = r;
-        data[index + 1] = g;
-        data[index + 2] = b;
-        data[index + 3] = a;
-      }
-    }
-    offCtx.putImageData(imageData, 0, 0);
-
-    // ==========================================
-    // 2. 主畫布原生裁切渲染 (徹底解決對不齊與溢出)
-    // ==========================================
-    const taiwanPath = new Path2D(TAIWAN_SVG_PATH);
-
-    // 畫上熱力圖 (並加上一點模糊讓色塊平滑)
-    ctx.filter = "blur(6px)";
-    ctx.drawImage(offCanvas, 0, 0);
-
-    // 【魔法】: globalCompositeOperation 裁切
-    // 這行指令會讓畫布「只保留與 taiwanPath 重疊的部分」，完美消除外海顏色
-    ctx.filter = "none";
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.fill(taiwanPath);
-
-    // 恢復正常繪圖模式，疊加上乾淨的外框與底色
-    ctx.globalCompositeOperation = "destination-over";
-    ctx.fillStyle = "#f8fafc"; // 陸地底色
-    ctx.fill(taiwanPath);
-
-    ctx.globalCompositeOperation = "source-over";
-    ctx.strokeStyle = "#cbd5e1"; // 海岸線
-    ctx.lineWidth = 1.2;
-    ctx.stroke(taiwanPath);
-
-  }, [epicenter, magnitude]);
+  if (!pureTownsTopo) return null; 
 
   return (
-    <div className="relative w-full max-w-[240px] mx-auto flex justify-center items-center">
-      <canvas
-        ref={canvasRef}
-        width={240}
-        height={400}
-        className="w-full h-auto drop-shadow-sm"
-        style={{ width: '100%', height: '100%' }}
-      />
-      
-      {/* 震央標記 */}
-      {(() => {
-        const px = getPixelCoords(epicenter.lng, epicenter.lat);
-        return (
-          <div 
-            className="absolute w-4 h-4 rounded-full border-[2px] border-white bg-rose-500 animate-pulse flex items-center justify-center shadow-md pointer-events-none"
-            style={{ 
-              left: `${(px.x / 240) * 100}%`, 
-              top: `${(px.y / 400) * 100}%`,
-              transform: 'translate(-50%, -50%)'
-            }}
-          >
-            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-          </div>
-        );
-      })()}
+    <div className="w-full max-w-[340px] mx-auto drop-shadow-sm flex justify-center items-center overflow-hidden">
+      <ComposableMap 
+        projection="geoMercator" 
+        projectionConfig={{ scale: 8500, center: [121.0, 23.65] }}
+        width={400}
+        height={600}
+        style={{ width: "100%", height: "auto", backgroundColor: reportStage === "EEW" ? "#f8fafc" : "transparent" }}
+      >
+        <defs>
+          <mask id="taiwan-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="600">
+            <rect x="-1000" y="-1000" width="3000" height="3000" fill="black" />
+            <Geographies geography={pureTownsTopo}>
+              {({ geographies }) =>
+                geographies.map((geo) => (
+                  <Geography key={geo.rsmKey} geography={geo} fill="white" />
+                ))
+              }
+            </Geographies>
+          </mask>
+        </defs>
+
+        {/* 1. 底層：EEW PGA 真實地質熱力點 */}
+        {reportStage === "EEW" && epicenterCoords && vs30Data.length > 0 && (
+          <g mask="url(#taiwan-mask)">
+            {vs30Data.map((point, index) => {
+              const [lon, lat, vs30] = point;
+              const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
+              const estIntensity = calculateEEWIntensity(dist, magnitude, vs30);
+              const color = getIntensityColor(estIntensity);
+              
+              if (color === "#f1f5f9") return null;
+
+              return (
+                <Marker key={index} coordinates={[lon, lat]}>
+                  {/* 🌟 縮小半徑至 9，打破假性的完美同心圓，呈現地質破碎感 */}
+                  <circle r={9} fill={color} opacity={0.85} />
+                </Marker>
+              );
+            })}
+          </g>
+        )}
+
+        {/* 2. 中層：368 鄉鎮實體地圖 */}
+        <Geographies geography={pureTownsTopo}>
+          {({ geographies }) =>
+            geographies.map((geo) => {
+              const isEEW = reportStage === "EEW";
+              const props = geo.properties;
+              const countyName = props.COUNTYNAME || props.COUNTY || props.C_Name || "";
+              const townName = props.TOWNNAME || props.TOWN || props.T_Name || "";
+
+              return (
+                <Geography
+                  key={geo.rsmKey}
+                  geography={geo}
+                  fill={isEEW ? "transparent" : getFillColor(countyName, townName)}
+                  stroke={isEEW ? "#94a3b8" : "#ffffff"}
+                  strokeWidth={isEEW ? 0.6 : 0.3}
+                  style={{
+                    default: { outline: "none", transition: "fill 0.5s ease" },
+                    hover: { outline: "none", filter: isEEW ? "none" : "brightness(0.9)" },
+                    pressed: { outline: "none" },
+                  }}
+                />
+              );
+            })
+          }
+        </Geographies>
+
+        {/* 3. 頂層：震央心跳動畫 */}
+        {epicenterCoords && (
+          <Marker coordinates={epicenterCoords}>
+            <circle r="0" fill="none" stroke="#ef4444" strokeWidth="2.5">
+              <animate attributeName="r" values={`0; ${heartbeatMaxR}`} dur="3.5s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.8; 0" dur="3.5s" repeatCount="indefinite" />
+            </circle>
+
+            <circle r="0" fill="none" stroke="#ef4444" strokeWidth="2.5">
+              <animate attributeName="r" values={`0; ${heartbeatMaxR}`} dur="3.5s" begin="0.5s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.8; 0" dur="3.5s" begin="0.5s" repeatCount="indefinite" />
+            </circle>
+
+            <circle r={3.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
+          </Marker>
+        )}
+      </ComposableMap>
     </div>
   );
 }
