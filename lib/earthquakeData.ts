@@ -15,7 +15,7 @@ export const getIntensityColor = (intensity: string) => {
   }
 };
 
-// 🌟 新增：終極字體翻譯蒟蒻 (消滅「臺」與「台」的差異)
+// 🌟 終極字體翻譯蒟蒻：消滅「臺/台」差異，解決地圖留白問題
 export const normalizeName = (name: string) => {
   if (!name) return "";
   return name.replace(/臺/g, "台");
@@ -41,10 +41,11 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
   return R * c;
 };
 
-// 🌟 修正：物理公式大進化 (強化距離衰減 -3.2，確保震央永遠最紅)
+// 🌟 修正：物理公式大進化 (強化距離衰減 -3.2，確保震央能量集中)
 export const calculateEEWIntensity = (distance: number, magnitude: number, vs30: number) => {
   let baseI = 1.3 * magnitude - 3.2 * Math.log10(distance + 10) + 1.0;
 
+  // 場址效應保留，但因為距離衰減變強，不會再反客為主
   if (vs30 < 250) baseI += 1.0;      
   else if (vs30 < 400) baseI += 0.5; 
   else if (vs30 > 600) baseI -= 0.5; 
