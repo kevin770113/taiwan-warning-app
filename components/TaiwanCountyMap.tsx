@@ -12,8 +12,8 @@ interface TaiwanCountyMapProps {
   epicenterCoords?: [number, number];
 }
 
-// 🌟 終極無敵版圖資：使用 CDN 託管的 taiwan-atlas 現代 368 鄉鎮 (絕不斷線、絕無缺漏)
-const geoUrl = "https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.topo.json";
+// 🌟 修正了致命的烏龍：移除了 .topo，這才是真正的檔案路徑！
+const geoUrl = "https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.json";
 
 export default function TaiwanCountyMap({ reportStage, magnitude, intensities = {}, epicenterCoords }: TaiwanCountyMapProps) {
   const [vs30Data, setVs30Data] = useState<[number, number, number][]>([]);
@@ -51,22 +51,22 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
         style={{ width: "100%", height: "auto", backgroundColor: reportStage === "EEW" ? "#f8fafc" : "transparent" }}
       >
         <defs>
-          {/* 🌟 終極裁切魔法：絕對不偏移的 SVG 反向遮罩 */}
           <mask id="taiwan-mask">
-            {/* 黑底：遮蔽所有超出台灣範圍的熱力點 */}
             <rect x="-1000" y="-1000" width="3000" height="3000" fill="black" />
-            {/* 白底：用真實的台灣輪廓挖出透光的洞 */}
             <Geographies geography={geoUrl}>
               {({ geographies }) =>
-                geographies.map((geo) => (
-                  <Geography key={geo.rsmKey} geography={geo} fill="white" />
-                ))
+                geographies
+                  // 🌟 致命攔截：過濾掉會把台灣蓋住的「國界」與「縣市」大圖塊
+                  .filter(geo => geo.properties && geo.properties.TOWNNAME)
+                  .map((geo) => (
+                    <Geography key={geo.rsmKey} geography={geo} fill="white" />
+                  ))
               }
             </Geographies>
           </mask>
         </defs>
 
-        {/* 1. 底層：EEW 真實地質熱力點 (無模糊、呈現真實場址效應的不規則形狀) */}
+        {/* 1. 底層：EEW 真實地質熱力點 (不規則場址效應，完美裁切) */}
         {reportStage === "EEW" && epicenterCoords && vs30Data.length > 0 && (
           <g mask="url(#taiwan-mask)">
             {vs30Data.map((point, index) => {
@@ -79,7 +79,6 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
 
               return (
                 <Marker key={index} coordinates={[lon, lat]}>
-                  {/* 半徑放大到 14，讓點自然交疊，展現真實的地理破碎感 */}
                   <circle r={14} fill={color} opacity={0.85} />
                 </Marker>
               );
@@ -90,29 +89,30 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
         {/* 2. 中層：現代版 368 鄉鎮實體地圖 */}
         <Geographies geography={geoUrl}>
           {({ geographies }) =>
-            geographies.map((geo) => {
-              const isEEW = reportStage === "EEW";
-              
-              // 🌟 屬性防呆：自動抓取 taiwan-atlas 的正確欄位名稱
-              const props = geo.properties;
-              const countyName = props.COUNTYNAME || props.COUNTY || props.C_Name || "";
-              const townName = props.TOWNNAME || props.TOWN || props.T_Name || "";
+            geographies
+              // 🌟 再次攔截：只畫有鄉鎮名稱的區塊，不畫疊加的大區塊
+              .filter(geo => geo.properties && geo.properties.TOWNNAME)
+              .map((geo) => {
+                const isEEW = reportStage === "EEW";
+                const props = geo.properties;
+                const countyName = props.COUNTYNAME || "";
+                const townName = props.TOWNNAME || "";
 
-              return (
-                <Geography
-                  key={geo.rsmKey}
-                  geography={geo}
-                  fill={isEEW ? "transparent" : getFillColor(countyName, townName)}
-                  stroke={isEEW ? "#94a3b8" : "#ffffff"}
-                  strokeWidth={isEEW ? 0.6 : 0.3}
-                  style={{
-                    default: { outline: "none", transition: "fill 0.5s ease" },
-                    hover: { outline: "none", filter: isEEW ? "none" : "brightness(0.9)" },
-                    pressed: { outline: "none" },
-                  }}
-                />
-              );
-            })
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={isEEW ? "transparent" : getFillColor(countyName, townName)}
+                    stroke={isEEW ? "#94a3b8" : "#ffffff"}
+                    strokeWidth={isEEW ? 0.6 : 0.3}
+                    style={{
+                      default: { outline: "none", transition: "fill 0.5s ease" },
+                      hover: { outline: "none", filter: isEEW ? "none" : "brightness(0.9)" },
+                      pressed: { outline: "none" },
+                    }}
+                  />
+                );
+              })
           }
         </Geographies>
 
