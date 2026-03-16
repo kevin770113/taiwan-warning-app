@@ -18,8 +18,13 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
   const [vs30Data, setVs30Data] = useState<[number, number, number][]>([]);
 
   useEffect(() => {
+    // 雙重防呆抓取：先抓小寫檔名，如果找不到（報錯），自動去抓大寫檔名！
     fetch("/vs30_grid.json")
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("Try uppercase");
+        return res.json();
+      })
+      .catch(() => fetch("/Vs30_grid.json").then(res => res.json()))
       .then(data => setVs30Data(data))
       .catch(err => console.error("Failed to load Vs30 grid", err));
   }, []);
@@ -33,24 +38,21 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
   return (
     <div className="w-full max-w-[340px] mx-auto drop-shadow-sm flex justify-center items-center overflow-hidden">
       
-      {/* 🌟 魔法一：設定直向畫布 (400x600)，解決切頭切尾問題
-        將 scale 拉高至 15000，並微調 center 使台灣本島完美佔滿畫面
-      */}
+      {/* 🌟 修復 1：直向畫布 (400x600)，並把 scale 溫和地降回 8500，保證不切頭切尾 */}
       <ComposableMap 
         projection="geoMercator" 
-        projectionConfig={{ scale: 15000, center: [120.9, 23.75] }}
+        projectionConfig={{ scale: 8500, center: [121.0, 23.65] }}
         width={400}
         height={600}
         style={{ width: "100%", height: "auto" }}
       >
-        {/* 🌟 魔法二：SVG 定義區 (高斯模糊濾鏡 + 台灣輪廓剪刀) */}
         <defs>
-          {/* 強烈的高斯模糊，讓點與點融合 */}
-          <filter id="heatmap-blur" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="7" />
+          {/* 高斯模糊濾鏡：將點狀熱力融合成平滑雲霧 */}
+          <filter id="heatmap-blur" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="6" />
           </filter>
 
-          {/* 台灣陸地輪廓裁切遮罩 (防止熱力圖溢出到外海) */}
+          {/* 台灣陸地輪廓裁切遮罩：防止熱力圖溢出到太平洋 */}
           <clipPath id="taiwan-clip">
             <Geographies geography={geoUrl}>
               {({ geographies }) =>
@@ -85,38 +87,37 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           }
         </Geographies>
 
-        {/* 2. 中層：EEW 高解析平滑熱力圖 (套用裁切與模糊) */}
-        {reportStage === "EEW" && epicenterCoords && (
-          <g clipPath="url(#taiwan-clip)">
-            <g filter="url(#heatmap-blur)">
-              {vs30Data.map((point, index) => {
-                const [lon, lat, vs30] = point;
-                const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
-                const estIntensity = calculateEEWIntensity(dist, magnitude, vs30);
-                const color = getIntensityColor(estIntensity);
-                
-                if (color === "#f1f5f9") return null;
+        {/* 2. 中層：EEW 高解析平滑熱力圖 (套用模糊與裁切) */}
+        {/* 🌟 修復 2：加上 vs30Data.length > 0 判斷，確保資料載入後才啟動濾鏡，防當機 */}
+        {reportStage === "EEW" && epicenterCoords && vs30Data.length > 0 && (
+          <g clipPath="url(#taiwan-clip)" filter="url(#heatmap-blur)">
+            {vs30Data.map((point, index) => {
+              const [lon, lat, vs30] = point;
+              const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
+              const estIntensity = calculateEEWIntensity(dist, magnitude, vs30);
+              const color = getIntensityColor(estIntensity);
+              
+              if (color === "#f1f5f9") return null;
 
-                return (
-                  <Marker key={index} coordinates={[lon, lat]}>
-                    <circle r={12} fill={color} opacity={0.85} />
-                  </Marker>
-                );
-              })}
-            </g>
+              return (
+                <Marker key={index} coordinates={[lon, lat]}>
+                  <circle r={10} fill={color} opacity={0.85} />
+                </Marker>
+              );
+            })}
           </g>
         )}
 
-        {/* 3. 頂層：震央水波紋動畫標記 */}
+        {/* 3. 頂層：震央同心圓水波紋動畫標記 */}
         {epicenterCoords && (
           <Marker coordinates={epicenterCoords}>
-            {/* 🌟 魔法三：SVG 原生波紋擴散動畫 (大波) */}
+            {/* 🌟 修復 3：純正的 SVG 向外擴散水波紋 (大波) */}
             <circle r="0" fill="none" stroke="#ef4444" strokeWidth="2">
               <animate attributeName="r" values="0; 35" dur="2s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.8; 0" dur="2s" repeatCount="indefinite" />
             </circle>
 
-            {/* SVG 原生波紋擴散動畫 (小波：延遲 1 秒出發) */}
+            {/* 純正的 SVG 向外擴散水波紋 (小波：延遲 1 秒出發) */}
             <circle r="0" fill="none" stroke="#ef4444" strokeWidth="2">
               <animate attributeName="r" values="0; 35" dur="2s" begin="1s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.8; 0" dur="2s" begin="1s" repeatCount="indefinite" />
