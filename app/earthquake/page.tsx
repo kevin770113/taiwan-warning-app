@@ -1,29 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Activity, MapPin, Clock, Radio, CheckCircle2, Loader2 } from "lucide-react";
+import { Activity, MapPin, Clock, Radio, CheckCircle2, Loader2, Cpu } from "lucide-react";
 import TaiwanCountyMap from "@/components/TaiwanCountyMap";
 import { fetchLatestEarthquake, EarthquakeReport } from "@/lib/earthquakeData";
 
 export default function EarthquakePage() {
-  // 預設切換到「正式報告」
   const [reportStage, setReportStage] = useState<"EEW" | "FORMAL">("FORMAL");
   const [quakeData, setQuakeData] = useState<EarthquakeReport | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // 頁面載入時，自動去抓取最新地震資料
   useEffect(() => {
     const loadData = async () => {
-      setIsLoading(true);
       const data = await fetchLatestEarthquake();
       setQuakeData(data);
-      setIsLoading(false);
     };
     loadData();
   }, []);
 
-  // 全螢幕載入畫面 (骨架屏)
-  if (isLoading || !quakeData) {
+  if (!quakeData) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center pb-20">
         <Loader2 className="animate-spin text-teal-500 mb-4" size={32} />
@@ -32,20 +26,17 @@ export default function EarthquakePage() {
     );
   }
 
-  const currentIntensities = reportStage === "FORMAL" ? quakeData.intensities : undefined;
-
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-24">
       
       <header className="pt-6 px-5 pb-4 bg-white border-b border-slate-100 sticky top-0 z-20 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-800 tracking-tight">地震資訊</h1>
-        <p className="text-sm text-slate-500 mt-1">氣象署即時測報整合</p>
+        <p className="text-sm text-slate-500 mt-1">即時測報與災情推估</p>
         
-        {/* 全新設計：淺顯易懂的雙頁籤 (Tabs) 切換 */}
-        <div className="flex bg-slate-100 p-1.5 rounded-xl mt-5">
+        <div className="flex bg-slate-100 p-1.5 rounded-xl mt-5 relative">
           <button 
             onClick={() => setReportStage("EEW")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all z-10 ${
               reportStage === "EEW" ? "bg-white text-amber-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}
           >
@@ -54,7 +45,7 @@ export default function EarthquakePage() {
           </button>
           <button 
             onClick={() => setReportStage("FORMAL")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all z-10 ${
               reportStage === "FORMAL" ? "bg-white text-teal-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}
           >
@@ -73,12 +64,9 @@ export default function EarthquakePage() {
             <div className="flex items-center gap-2">
               {reportStage === "EEW" ? (
                 <>
-                  <span className="flex h-3 w-3 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-                  </span>
+                  <Cpu size={16} className="text-amber-500" />
                   <span className="text-xs font-bold uppercase tracking-wider text-amber-600">
-                    初步推估數據
+                    系統初步推估
                   </span>
                 </>
               ) : (
@@ -90,8 +78,9 @@ export default function EarthquakePage() {
                 </>
               )}
             </div>
+            {/* 🌟 完整顯示年月日與時間 */}
             <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-              <Clock size={12} /> {quakeData.time.split(" ")[1]}
+              <Clock size={12} /> {quakeData.time}
             </span>
           </div>
 
@@ -114,33 +103,21 @@ export default function EarthquakePage() {
               {quakeData.epicenter}
             </p>
           </div>
-          
-          {reportStage === "EEW" && (
-            <p className="mt-3 text-[11px] text-amber-600 font-bold animate-pulse">
-              * 系統自動解算中，精確災情請依正式報告為準。
-            </p>
-          )}
         </section>
 
         <section className="bg-white p-5 rounded-3xl shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-slate-100">
           <div className="flex justify-between items-center mb-2">
             <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <Activity size={16} className="text-teal-600" />
-              各地最大震度
+              <Activity size={16} className={reportStage === "EEW" ? "text-amber-500" : "text-teal-600"} />
+              {reportStage === "EEW" ? "電腦預估震度網格" : "各地實際最大震度"}
             </h2>
           </div>
 
-          <div className="bg-slate-50/50 rounded-2xl border border-slate-100/50 mb-4 relative overflow-hidden">
-            {/* 白話文說明遮罩 */}
-            {reportStage === "EEW" && (
-              <div className="absolute inset-0 bg-white/60 backdrop-blur-[1.5px] z-10 flex flex-col items-center justify-center">
-                <Radio size={24} className="text-slate-400 animate-bounce mb-2" />
-                <span className="text-xs font-bold text-slate-600">氣象署數據統整中，請保持警戒...</span>
-              </div>
-            )}
-            
+          <div className="bg-slate-50/50 rounded-2xl border border-slate-100/50 mb-4 relative overflow-hidden py-4">
             <TaiwanCountyMap 
-              intensities={currentIntensities} 
+              reportStage={reportStage}
+              magnitude={quakeData.magnitude}
+              intensities={quakeData.intensities} 
               epicenterCoords={quakeData.epicenterCoords}
             />
           </div>
