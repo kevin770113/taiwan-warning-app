@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
-import { getIntensityColor, normalizeCountyName, calculateDistance, calculateEEWIntensity } from "@/lib/earthquakeData";
+import { getIntensityColor, normalizeCountyName, normalizeName, calculateDistance, calculateEEWIntensity } from "@/lib/earthquakeData";
 
 interface TaiwanCountyMapProps {
   reportStage: "EEW" | "FORMAL";
@@ -12,7 +12,6 @@ interface TaiwanCountyMapProps {
   epicenterCoords?: [number, number];
 }
 
-// 🌟 終極解法：直接抓取 g0v 零時政府開源的雲端標準 UTF-8 鄉鎮圖資！(免下載、絕對無亂碼)
 const geoUrl = "https://raw.githubusercontent.com/g0v/twgeojson/master/json/twTown1982.topo.json";
 
 export default function TaiwanCountyMap({ reportStage, magnitude, intensities = {}, epicenterCoords }: TaiwanCountyMapProps) {
@@ -30,10 +29,11 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
   }, []);
 
   const getFillColor = (countyName: string, townName: string) => {
+    // 🌟 透過 normalizeName 先把圖資裡的「臺」全部轉成「台」
     const modernCounty = normalizeCountyName(countyName);
-    const intensity = intensities[townName] || intensities[modernCounty];
+    const modernTown = normalizeName(townName);
+    const intensity = intensities[modernTown] || intensities[modernCounty];
     
-    // 🌟 破除無資料保護色：給予稍深的灰藍色，而不是跟背景融合的極淺白
     if (!intensity || intensity === "0") return "#e2e8f0"; 
     return getIntensityColor(intensity);
   };
@@ -54,29 +54,45 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           <filter id="heatmap-blur" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="6" />
           </filter>
+
+          {/* 🌟 終極裁切魔法：SVG 反向遮罩 */}
+          <mask id="taiwan-mask">
+            {/* 黑底：代表遮蔽所有東西 */}
+            <rect x="0" y="0" width="400" height="600" fill="black" />
+            {/* 白底：將台灣陸地挖洞，讓底層熱力透出來 */}
+            <Geographies geography={geoUrl}>
+              {({ geographies }) =>
+                geographies.map((geo) => (
+                  <Geography key={geo.rsmKey} geography={geo} fill="white" />
+                ))
+              }
+            </Geographies>
+          </mask>
         </defs>
 
-        {/* 1. 底層：EEW 高解析熱力雲 (完美套用模糊) */}
+        {/* 1. 底層：EEW 高解析熱力雲 (套用模糊與 mask 完美裁切) */}
         {reportStage === "EEW" && epicenterCoords && vs30Data.length > 0 && (
-          <g filter="url(#heatmap-blur)">
-            {vs30Data.map((point, index) => {
-              const [lon, lat, vs30] = point;
-              const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
-              const estIntensity = calculateEEWIntensity(dist, magnitude, vs30);
-              const color = getIntensityColor(estIntensity);
-              
-              if (color === "#f1f5f9") return null;
+          <g mask="url(#taiwan-mask)">
+            <g filter="url(#heatmap-blur)">
+              {vs30Data.map((point, index) => {
+                const [lon, lat, vs30] = point;
+                const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
+                const estIntensity = calculateEEWIntensity(dist, magnitude, vs30);
+                const color = getIntensityColor(estIntensity);
+                
+                if (color === "#f1f5f9") return null;
 
-              return (
-                <Marker key={index} coordinates={[lon, lat]}>
-                  <circle r={10} fill={color} opacity={0.85} />
-                </Marker>
-              );
-            })}
+                return (
+                  <Marker key={index} coordinates={[lon, lat]}>
+                    <circle r={12} fill={color} opacity={0.9} />
+                  </Marker>
+                );
+              })}
+            </g>
           </g>
         )}
 
-        {/* 2. 頂層：368 鄉鎮實體地圖 (鏤空網格壓制) */}
+        {/* 2. 中層：368 鄉鎮實體地圖 */}
         <Geographies geography={geoUrl}>
           {({ geographies }) =>
             geographies.map((geo) => {
@@ -89,7 +105,6 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
                   key={geo.rsmKey}
                   geography={geo}
                   fill={isEEW ? "transparent" : getFillColor(countyName, townName)}
-                  // 🌟 破除網格迷彩：EEW 使用深石板灰 (#94a3b8)，FORMAL 使用白色細線
                   stroke={isEEW ? "#94a3b8" : "#ffffff"}
                   strokeWidth={isEEW ? 0.6 : 0.3}
                   style={{
@@ -103,7 +118,7 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           }
         </Geographies>
 
-        {/* 3. 頂層之上的頂層：震央心跳動畫 */}
+        {/* 3. 頂層：震央心跳動畫 */}
         {epicenterCoords && (
           <Marker coordinates={epicenterCoords}>
             <circle r="0" fill="none" stroke="#ef4444" strokeWidth="2.5">
