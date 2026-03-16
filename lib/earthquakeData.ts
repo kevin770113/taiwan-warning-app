@@ -40,18 +40,16 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
   return R * c;
 };
 
-// 🌟 終極科學進化：PGA (地表最大加速度) 衰減與連續場址乘數模型
-export const calculateEEWIntensity = (distance: number, magnitude: number, vs30: number) => {
-  // 1. 基盤 PGA 衰減公式 (更陡峭的衰減，距離懲罰加重)
+// 🌟 核心一：將 PGA 運算獨立出來 (回傳純數字)
+export const calculatePGA = (distance: number, magnitude: number, vs30: number) => {
   const logPGA = 0.5 * magnitude - 1.8 * Math.log10(distance + 10) + 1.8;
   let pga = Math.pow(10, logPGA);
-
-  // 2. Vs30 連續場址效應公式 (非線性乘數，直接反映地質破碎度)
-  // vs30 越小，乘數越大。例如 vs30=200 -> sqrt(800/200)=2.0 倍
   const siteEffect = Math.sqrt(800 / Math.max(vs30, 150));
-  pga *= siteEffect;
+  return pga * siteEffect;
+};
 
-  // 3. 嚴格對射氣象署 10 級震度
+// 🌟 核心二：PGA 對應氣象署震度轉換表
+export const getIntensityFromPGA = (pga: number) => {
   if (pga < 0.8) return "0";
   if (pga < 2.5) return "1";
   if (pga < 8.0) return "2";
@@ -62,6 +60,11 @@ export const calculateEEWIntensity = (distance: number, magnitude: number, vs30:
   if (pga < 400) return "6弱";
   if (pga < 800) return "6強";
   return "7";
+};
+
+// 原本的整合函式保留給其他地方用
+export const calculateEEWIntensity = (distance: number, magnitude: number, vs30: number) => {
+  return getIntensityFromPGA(calculatePGA(distance, magnitude, vs30));
 };
 
 export interface EarthquakeReport {
@@ -86,7 +89,6 @@ export const fetchLatestEarthquake = async (): Promise<EarthquakeReport> => {
         epicenterCoords: [121.67, 23.77], 
         magnitude: 7.2,
         depth: 15.5,
-        // 🌟 補齊全台 22 縣市資料！並加入更多山區鄉鎮，展現完美填色實力
         intensities: {
           "花蓮縣": "6弱", "花蓮市": "6強", "壽豐鄉": "6強", "吉安鄉": "5強",
           "宜蘭縣": "5強", "南澳鄉": "6弱",
