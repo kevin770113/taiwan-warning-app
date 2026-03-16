@@ -2,7 +2,7 @@
 
 export const getIntensityColor = (intensity: string) => {
   switch (intensity) {
-    case "1":
+    case "1": return "#86efac";
     case "2": return "#86efac";
     case "3": return "#fde047";
     case "4": return "#fb923c";
@@ -15,7 +15,6 @@ export const getIntensityColor = (intensity: string) => {
   }
 };
 
-// 🌟 終極字體翻譯蒟蒻：消滅「臺/台」差異，解決地圖留白問題
 export const normalizeName = (name: string) => {
   if (!name) return "";
   return name.replace(/臺/g, "台");
@@ -41,23 +40,27 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
   return R * c;
 };
 
-// 🌟 修正：物理公式大進化 (強化距離衰減 -3.2，確保震央能量集中)
+// 🌟 終極科學進化：PGA (地表最大加速度) 衰減與場址乘數模型
 export const calculateEEWIntensity = (distance: number, magnitude: number, vs30: number) => {
-  let baseI = 1.3 * magnitude - 3.2 * Math.log10(distance + 10) + 1.0;
+  // 1. 基盤 PGA 衰減公式 (對數衰減，距離越遠能量急遽下降)
+  const logPGA = 0.5 * magnitude - 1.5 * Math.log10(distance + 15) + 1.5;
+  let pga = Math.pow(10, logPGA);
 
-  // 場址效應保留，但因為距離衰減變強，不會再反客為主
-  if (vs30 < 250) baseI += 1.0;      
-  else if (vs30 < 400) baseI += 0.5; 
-  else if (vs30 > 600) baseI -= 0.5; 
+  // 2. Vs30 場址效應 (改為乘數 Amplification Factor)
+  if (vs30 < 250) pga *= 2.0;       // 軟弱盆地/沖積平原：放大 2 倍
+  else if (vs30 < 400) pga *= 1.4;  // 一般平原：放大 1.4 倍
+  else if (vs30 > 600) pga *= 0.7;  // 堅硬岩盤：能量衰減 0.7 倍
 
-  if (baseI < 0) return "0";
-  if (baseI < 2.5) return "2";
-  if (baseI < 3.5) return "3";
-  if (baseI < 4.5) return "4";
-  if (baseI < 5.0) return "5弱";
-  if (baseI < 5.5) return "5強";
-  if (baseI < 6.0) return "6弱";
-  if (baseI < 6.5) return "6強";
+  // 3. 嚴格對射氣象署 10 級震度 (PGA gal 值標準)
+  if (pga < 0.8) return "0";
+  if (pga < 2.5) return "1";
+  if (pga < 8.0) return "2";
+  if (pga < 25) return "3";
+  if (pga < 80) return "4";
+  if (pga < 140) return "5弱";
+  if (pga < 250) return "5強";
+  if (pga < 400) return "6弱";
+  if (pga < 800) return "6強";
   return "7";
 };
 
