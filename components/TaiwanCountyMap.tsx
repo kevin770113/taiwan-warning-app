@@ -12,8 +12,8 @@ interface TaiwanCountyMapProps {
   epicenterCoords?: [number, number];
 }
 
-// 🌟 指向你最新上傳的鄉鎮地圖檔
-const geoUrl = "/taiwan-town-topo.json";
+// 🌟 終極解法：直接抓取 g0v 零時政府開源的雲端標準 UTF-8 鄉鎮圖資！(免下載、絕對無亂碼)
+const geoUrl = "https://raw.githubusercontent.com/g0v/twgeojson/master/json/twTown1982.topo.json";
 
 export default function TaiwanCountyMap({ reportStage, magnitude, intensities = {}, epicenterCoords }: TaiwanCountyMapProps) {
   const [vs30Data, setVs30Data] = useState<[number, number, number][]>([]);
@@ -29,14 +29,15 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
       .catch(err => console.error("Failed to load Vs30 grid", err));
   }, []);
 
-  // 🌟 聰明繼承演算法：先找鄉鎮，找不到再找縣市
   const getFillColor = (countyName: string, townName: string) => {
     const modernCounty = normalizeCountyName(countyName);
     const intensity = intensities[townName] || intensities[modernCounty];
-    return getIntensityColor(intensity || "0");
+    
+    // 🌟 破除無資料保護色：給予稍深的灰藍色，而不是跟背景融合的極淺白
+    if (!intensity || intensity === "0") return "#e2e8f0"; 
+    return getIntensityColor(intensity);
   };
 
-  // 🌟 動態心跳半徑公式：至少 25，隨規模無限放大
   const heartbeatMaxR = Math.max(25, magnitude * 7);
 
   return (
@@ -55,7 +56,7 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           </filter>
         </defs>
 
-        {/* 🌟 圖層反轉第一步：將熱力雲放在「最底層」(移除會當機的 clipPath) */}
+        {/* 1. 底層：EEW 高解析熱力雲 (完美套用模糊) */}
         {reportStage === "EEW" && epicenterCoords && vs30Data.length > 0 && (
           <g filter="url(#heatmap-blur)">
             {vs30Data.map((point, index) => {
@@ -75,7 +76,7 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           </g>
         )}
 
-        {/* 🌟 圖層反轉第二步：將 368 鄉鎮的「實體白線」蓋在熱力圖上面 */}
+        {/* 2. 頂層：368 鄉鎮實體地圖 (鏤空網格壓制) */}
         <Geographies geography={geoUrl}>
           {({ geographies }) =>
             geographies.map((geo) => {
@@ -87,11 +88,10 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  // EEW 時內部完全透明 (讓底層熱力透上來)，正式報告時智能上色
                   fill={isEEW ? "transparent" : getFillColor(countyName, townName)}
-                  // 白色粗線框，負責把熱力圖「壓」出台灣形狀
-                  stroke="#ffffff"
-                  strokeWidth={isEEW ? 0.7 : 0.4}
+                  // 🌟 破除網格迷彩：EEW 使用深石板灰 (#94a3b8)，FORMAL 使用白色細線
+                  stroke={isEEW ? "#94a3b8" : "#ffffff"}
+                  strokeWidth={isEEW ? 0.6 : 0.3}
                   style={{
                     default: { outline: "none", transition: "fill 0.5s ease" },
                     hover: { outline: "none", filter: isEEW ? "none" : "brightness(0.9)" },
@@ -103,22 +103,19 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           }
         </Geographies>
 
-        {/* 3. 頂層：完美節奏的動態震央心跳 */}
+        {/* 3. 頂層之上的頂層：震央心跳動畫 */}
         {epicenterCoords && (
           <Marker coordinates={epicenterCoords}>
-            {/* 大波：週期 3.5s */}
             <circle r="0" fill="none" stroke="#ef4444" strokeWidth="2.5">
               <animate attributeName="r" values={`0; ${heartbeatMaxR}`} dur="3.5s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.8; 0" dur="3.5s" repeatCount="indefinite" />
             </circle>
 
-            {/* 小波：延遲 0.5s，創造「撲通..撲通」感 */}
             <circle r="0" fill="none" stroke="#ef4444" strokeWidth="2.5">
               <animate attributeName="r" values={`0; ${heartbeatMaxR}`} dur="3.5s" begin="0.5s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.8; 0" dur="3.5s" begin="0.5s" repeatCount="indefinite" />
             </circle>
 
-            {/* 靜止核心 */}
             <circle r={3.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
           </Marker>
         )}
