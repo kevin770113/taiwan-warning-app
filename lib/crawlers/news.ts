@@ -1,49 +1,74 @@
 // 檔案：lib/crawlers/news.ts
 
-const FALLBACK_NEWS = [
-  { id: 1, source: "系統提示", time: "剛剛", title: "無法取得最新即時新聞", snippet: "由於網路異常或連線超時，目前顯示為系統保護狀態的歷史摘要。請稍後重試。" },
-  { id: 2, source: "Reuters (歷史快取)", time: "2 小時前", title: "U.S. closely monitoring Taiwan Strait activities", snippet: "Washington reiterates calls for peaceful resolution and stability in the region..." },
-];
-
 export async function fetchNewsData() {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 秒防禦
 
-    // 這裡我們使用 GNews 的免費 API，並搜尋 "Taiwan Strait" 或 "台海"
-    // 注意：在 Vercel 上你應該要把 API Key 寫在環境變數 (process.env.NEWS_API_KEY)
-    // 這裡我先用一個免金鑰的模擬公開 API 端點展示結構，防止你現在測試報錯
+    // 🚨 零妥協驗證：嚴格檢查是否有設定環境變數
+    // 在 Vercel 上，這會讀取你剛剛設定的 NEWS_API_KEY
+    const apiKey = process.env.NEWS_API_KEY; 
     
-    const apiKey = process.env.NEWS_API_KEY || "demo_key"; 
-    
-    // 如果沒有設定真實 Key，我們就直接回傳安全的回退資料，避免污染畫面
-    if (apiKey === "demo_key") {
+    // 如果系統找不到金鑰，誠實回報錯誤，絕對不提供假資料墊檔！
+    if (!apiKey) {
       clearTimeout(timeoutId);
       return [
-        { id: 1, source: "Reuters", time: "30 分鐘前", title: "U.S. closely monitoring Taiwan Strait activities amid recent drills", snippet: "Washington reiterates calls for peaceful resolution and stability in the region..." },
-        { id: 2, source: "國內綜合報導", time: "2 小時前", title: "外資單日大幅賣超台股 300 億，匯市呈現震盪", snippet: "金融圈人士指出，近期地緣政治風險微幅上升，導致避險資金短期流出..." },
+        { 
+          id: 1, 
+          source: "系統警告", 
+          time: "剛剛", 
+          title: "尚未設定新聞 API 金鑰", 
+          snippet: "開發者注意：系統無法取得即時新聞。請在 Vercel 後台或本地端的 .env.local 檔案中設定 NEWS_API_KEY 環境變數。" 
+        }
       ];
     }
 
-    // 真實呼叫 (如果有填 Key 的話)
+    // 真實呼叫 GNews API (搜尋台海相關新聞，取最新 3 筆)
     const url = `https://gnews.io/api/v4/search?q=台海&lang=zh&max=3&apikey=${apiKey}`;
-    const res = await fetch(url, { signal: controller.signal, next: { revalidate: 600 } });
     
-    if (!res.ok) throw new Error("新聞 API 回應錯誤");
+    // 這裡同樣使用 Vercel 的邊緣快取 (600 秒 = 10 分鐘)
+    // 保證一天只會消耗少量的 API 額度，絕不超支！
+    const res = await fetch(url, { 
+        signal: controller.signal, 
+        next: { revalidate: 600 } 
+    });
+    
+    if (!res.ok) throw new Error(`HTTP Error: ${res.status} (新聞 API 拒絕連線或額度耗盡)`);
+    
     const data = await res.json();
     clearTimeout(timeoutId);
+
+    // 如果真的沒有台海相關新聞
+    if (!data.articles || data.articles.length === 0) {
+        return [{
+            id: 1,
+            source: "系統回報",
+            time: new Date().toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" }),
+            title: "目前無重大台海新聞",
+            snippet: "過去一段時間內，並未搜尋到符合「台海」關鍵字的重大新聞報導。"
+        }];
+    }
 
     // 將 GNews 格式轉換成我們 UI 需要的格式
     return data.articles.map((article: any, index: number) => ({
       id: index + 1,
-      source: article.source.name,
-      time: new Date(article.publishedAt).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" }),
+      source: article.source.name || "國際新聞",
+      time: new Date(article.publishedAt).toLocaleTimeString("zh-TW", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
       title: article.title,
-      snippet: article.description,
+      snippet: article.description || "無摘要",
     }));
 
   } catch (error) {
     console.error("❌ 新聞爬蟲發生錯誤:", error);
-    return FALLBACK_NEWS;
+    // 🛡️ 誠實的錯誤回報：網路中斷或 API 掛掉時，明白告訴使用者
+    return [
+        { 
+          id: 1, 
+          source: "連線異常", 
+          time: "--", 
+          title: "無法取得即時新聞", 
+          snippet: "由於網路異常或連線超時，目前無法取得即時新聞。請稍後下拉重新整理。" 
+        }
+    ];
   }
 }
