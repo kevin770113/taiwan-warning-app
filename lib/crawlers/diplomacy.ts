@@ -1,58 +1,82 @@
 // 檔案：lib/crawlers/diplomacy.ts
 
-// 模擬的回退資料 (當真實 API 掛掉時使用)
-const FALLBACK_DIPLOMACY = [
-  { id: 1, country: "美國", flag: "🇺🇸", status: "Level 3: Reconsider Travel", level: "warning", time: "2 小時前" },
-  { id: 2, country: "日本", flag: "🇯🇵", status: "維持正常", level: "normal", time: "1 天前" },
-  { id: 3, country: "英國", flag: "🇬🇧", status: "維持正常", level: "normal", time: "3 天前" },
-  { id: 4, country: "澳洲", flag: "🇦🇺", status: "Level 2: High Caution", level: "notice", time: "5 小時前" },
-];
-
 export async function fetchDiplomacyData() {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 秒防禦
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 秒連線防禦
 
     // 抓取外交部領事事務局：國外旅遊警示分級表 Open Data (JSON 格式)
     const url = "https://www.boca.gov.tw/sp-trv-open-data-1.html";
     
     const res = await fetch(url, { 
       signal: controller.signal, 
-      next: { revalidate: 3600 } // 快取 1 小時，旅遊警示不需要秒級更新
+      next: { revalidate: 3600 } // Vercel 快取 1 小時
     });
     
-    if (!res.ok) throw new Error("外交部 Open Data 抓取失敗");
-    const data = await res.json();
+    if (!res.ok) throw new Error(`HTTP Error: ${res.status} (外交部 Open Data 抓取失敗)`);
+    
+    const rawData = await res.json();
     clearTimeout(timeoutId);
 
-    // 我們需要把官方的原始資料，轉換成我們 UI 需要的 4 筆重點國家
-    // 為了展示目的，我們先抓取資料陣列的前幾筆，並轉譯燈號
-    // (實際運作時，這裡可以寫邏輯去篩選特定國家如美、日、英、澳)
-    
-    const formattedData = data.slice(0, 4).map((item: any, index: number) => {
-      // 外交部燈號轉換 (紅/橙/黃/灰)
-      let uiLevel = "normal";
-      if (item.severity === "紅色警示" || item.severity === "橙色警示") uiLevel = "warning";
-      if (item.severity === "黃色警示") uiLevel = "notice";
+    if (!Array.isArray(rawData)) {
+      throw new Error("外交部 API 資料結構改變，無法解析非陣列格式");
+    }
 
-      // 簡單的國旗 Mapping (這裡只做示範)
-      const flagMap: Record<string, string> = { "美國": "🇺🇸", "日本": "🇯🇵", "英國": "🇬🇧", "澳洲": "🇦🇺" };
+    // 🚨 真實過濾邏輯：我們只提取「紅色警示 (Red)」或「橙色警示 (Orange)」或「黃色警示 (Yellow)」的國家
+    const criticalWarnings = rawData.filter((item: any) => {
+      // 由於 Open Data 欄位名稱可能變動，採用防禦性讀取
+      const severity = item.severity || item.alertLevel || item.info || "";
+      return severity.includes("紅色") || severity.includes("橙色") || severity.includes("黃色");
+    });
+
+    // 🚨 真實排序邏輯：危險度高的排前面 (紅 > 橙 > 黃)
+    criticalWarnings.sort((a: any, b: any) => {
+       const sA = a.severity || a.alertLevel || "";
+       const sB = b.severity || b.alertLevel || "";
+       const weightA = sA.includes("紅") ? 3 : (sA.includes("橙") ? 2 : 1);
+       const weightB = sB.includes("紅") ? 3 : (sB.includes("橙") ? 2 : 1);
+       return weightB - weightA;
+    });
+
+    // 如果全球太平，無任何重大警示，誠實回報
+    if (criticalWarnings.length === 0) {
+      return [{
+        id: 1, 
+        country: "全球", 
+        flag: "🌍", 
+        status: "無重大紅色旅遊警示", 
+        level: "normal", 
+        time: new Date().toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })
+      }];
+    }
+
+    // 將最危險的前 4 筆真實資料轉換為 UI 格式
+    return criticalWarnings.slice(0, 4).map((item: any, index: number) => {
+      const severity = item.severity || item.alertLevel || "未知警示";
+      let uiLevel = "normal";
+      if (severity.includes("紅色") || severity.includes("橙色")) uiLevel = "warning";
+      else if (severity.includes("黃色")) uiLevel = "notice";
       
       return {
         id: index + 1,
-        country: item.country || "未知國家",
-        flag: flagMap[item.country] || "🌐", // 找不到國旗給個地球圖示
-        status: item.severity || "維持正常",
+        country: item.country || item.countryName || "未知國家",
+        flag: "⚠️", // 放棄假國旗，改用真實的警告圖示
+        status: severity,
         level: uiLevel,
-        time: "今日更新" // OpenAPI 沒有提供精準時分秒，統一顯示今日
+        time: "今日更新" 
       };
     });
 
-    // 如果 API 吐不出東西，還是回傳 Fallback
-    return formattedData.length > 0 ? formattedData : FALLBACK_DIPLOMACY;
-
   } catch (error) {
     console.error("❌ 外交爬蟲發生錯誤:", error);
-    return FALLBACK_DIPLOMACY;
+    // 🛡️ 誠實的錯誤回報 (絕不給假資料！)
+    return [{
+       id: 1, 
+       country: "連線異常", 
+       flag: "📡", 
+       status: "無法取得外交部資料", 
+       level: "normal", 
+       time: "--"
+    }];
   }
 }
