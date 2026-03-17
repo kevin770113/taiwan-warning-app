@@ -168,7 +168,7 @@ export default function IntelligencePage() {
           <p className="text-[11px] font-medium tracking-wide">
             {activeTab === "military" && "資料來源：中華民國國防部 / 中央通訊社"}
             {activeTab === "diplomacy" && "資料來源：外交部領事事務局 Open Data"}
-            {activeTab === "finance" && "資料來源：台灣證券交易所 / ExchangeRate-API"}
+            {activeTab === "finance" && "資料來源：台灣證券交易所 / RTER 全球即時匯率 API"}
             {activeTab === "news" && "資料來源：GNews 即時新聞 / 全球通訊社"}
           </p>
         </div>
