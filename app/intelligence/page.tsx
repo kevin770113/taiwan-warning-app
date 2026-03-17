@@ -2,13 +2,11 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Crosshair, Globe, TrendingDown, Newspaper, ExternalLink, ShieldAlert, RefreshCw } from "lucide-react";
+import { Clock, Crosshair, Globe, TrendingDown, Newspaper, ExternalLink, ShieldAlert, RefreshCw, Info } from "lucide-react";
 import { useIntelligence } from "@/lib/useIntelligence";
 
 export default function IntelligencePage() {
   const [activeTab, setActiveTab] = useState<"military" | "diplomacy" | "finance" | "news">("military");
-  
-  // 🌟 核心：引入我們手刻的快取大腦
   const { data, lastUpdated, isFetching, refetch } = useIntelligence();
 
   const tabs = [
@@ -19,15 +17,13 @@ export default function IntelligencePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans pb-24">
+    <div className="min-h-screen bg-[#f8fafc] font-sans pb-24 flex flex-col">
       <header className="pt-6 px-5 pb-4 bg-white border-b border-slate-100">
         <div className="flex justify-between items-end mb-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800 tracking-tight">情報與預警中心</h1>
             <p className="text-sm text-slate-500 mt-1">即時動態追蹤</p>
           </div>
-          
-          {/* 🌟 加入重新整理功能與最後更新時間 */}
           <button 
             onClick={refetch}
             disabled={isFetching}
@@ -60,8 +56,7 @@ export default function IntelligencePage() {
         </div>
       </header>
 
-      <main className="p-5">
-        {/* 🌟 Loading 骨架屏狀態 */}
+      <main className="p-5 flex-1 flex flex-col">
         {isFetching && !data && (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
             <RefreshCw size={32} className="animate-spin mb-4 text-slate-300" />
@@ -69,10 +64,8 @@ export default function IntelligencePage() {
           </div>
         )}
 
-        {/* 🌟 渲染真實取得的資料 */}
         {data && (
-          <>
-            {/* ⚔️ 軍事動態 */}
+          <div className="flex-1">
             {activeTab === "military" && (
               <div className="relative border-l-2 border-slate-200 ml-3 space-y-6 pb-4">
                 {data.military.map((item) => (
@@ -94,7 +87,6 @@ export default function IntelligencePage() {
               </div>
             )}
 
-            {/* 🤝 外交撤僑 */}
             {activeTab === "diplomacy" && (
               <div className="space-y-3">
                 {data.diplomacy.map((item) => (
@@ -120,7 +112,6 @@ export default function IntelligencePage() {
               </div>
             )}
 
-            {/* 💰 金融異動 */}
             {activeTab === "finance" && (
               <div className="space-y-3">
                 {data.finance.map((item) => (
@@ -147,7 +138,6 @@ export default function IntelligencePage() {
               </div>
             )}
 
-            {/* 📰 新聞情緒 */}
             {activeTab === "news" && (
               <div className="space-y-4">
                 {data.news.map((item) => (
@@ -158,17 +148,30 @@ export default function IntelligencePage() {
                     </div>
                     <h3 className="font-bold text-slate-800 text-sm leading-snug mb-1.5">{item.title}</h3>
                     <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{item.snippet}</p>
-                    <div className="mt-3 flex justify-end">
-                      <button className="text-[11px] font-bold text-teal-600 flex items-center hover:text-teal-700">
-                        閱讀摘要 <ExternalLink size={12} className="ml-1" />
-                      </button>
-                    </div>
+                    {item.url && (
+                      <div className="mt-3 flex justify-end">
+                        <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-bold text-teal-600 flex items-center hover:text-teal-700">
+                          閱讀原文 <ExternalLink size={12} className="ml-1" />
+                        </a>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
+
+        {/* 🌟 查證來源宣告區塊 (Data Source Footer) */}
+        <div className="mt-8 pt-4 border-t border-slate-200/60 flex items-center justify-center gap-1.5 text-slate-400">
+          <Info size={13} />
+          <p className="text-[11px] font-medium tracking-wide">
+            {activeTab === "military" && "資料來源：中華民國國防部 / 中央通訊社"}
+            {activeTab === "diplomacy" && "資料來源：外交部領事事務局 Open Data"}
+            {activeTab === "finance" && "資料來源：台灣證券交易所 / ExchangeRate-API"}
+            {activeTab === "news" && "資料來源：GNews 即時新聞 / 全球通訊社"}
+          </p>
+        </div>
       </main>
     </div>
   );
