@@ -40,31 +40,39 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
   return R * c;
 };
 
-// 🌟 核心一：將 PGA 運算獨立出來 (回傳純數字)
-export const calculatePGA = (distance: number, magnitude: number, vs30: number) => {
+// 🌟 核心一：同時計算 PGA(加速度) 與 PGV(速度) 的衰減公式
+export const calculateBaseGroundMotion = (distance: number, magnitude: number, vs30: number) => {
+  // 1. PGA 運算
   const logPGA = 0.5 * magnitude - 1.8 * Math.log10(distance + 10) + 1.8;
   let pga = Math.pow(10, logPGA);
-  const siteEffect = Math.sqrt(800 / Math.max(vs30, 150));
-  return pga * siteEffect;
+  const siteEffectPGA = Math.sqrt(800 / Math.max(vs30, 150));
+  
+  // 2. PGV 運算 (速度波對長距離的衰減較慢，但對盆地效應極度敏感)
+  const logPGV = 0.65 * magnitude - 1.6 * Math.log10(distance + 10) - 0.5;
+  let pgv = Math.pow(10, logPGV);
+  const siteEffectPGV = Math.sqrt(800 / Math.max(vs30, 100));
+
+  return { 
+    pga: pga * siteEffectPGA, 
+    pgv: pgv * siteEffectPGV 
+  };
 };
 
-// 🌟 核心二：PGA 對應氣象署震度轉換表
-export const getIntensityFromPGA = (pga: number) => {
+// 🌟 核心二：氣象署 2020 新制震度分級 (PGA/PGV 雙軌判定)
+export const getCWAIntensity = (pga: number, pgv: number) => {
   if (pga < 0.8) return "0";
   if (pga < 2.5) return "1";
   if (pga < 8.0) return "2";
   if (pga < 25) return "3";
   if (pga < 80) return "4";
-  if (pga < 140) return "5弱";
-  if (pga < 250) return "5強";
-  if (pga < 400) return "6弱";
-  if (pga < 800) return "6強";
-  return "7";
-};
 
-// 原本的整合函式保留給其他地方用
-export const calculateEEWIntensity = (distance: number, magnitude: number, vs30: number) => {
-  return getIntensityFromPGA(calculatePGA(distance, magnitude, vs30));
+  // 🚨 PGA 超過 80 gal (5弱標準) 時，強制切換為 PGV 判定！
+  if (pgv < 15) return "4";  // 高頻短波，搖晃時間短，降級回4級
+  if (pgv < 30) return "5弱"; // 真正的低頻長週期破壞力
+  if (pgv < 50) return "5強";
+  if (pgv < 80) return "6弱";
+  if (pgv < 140) return "6強";
+  return "7";
 };
 
 export interface EarthquakeReport {
