@@ -8,8 +8,8 @@ import {
   normalizeCountyName, 
   normalizeName, 
   calculateDistance, 
-  calculatePGA, 
-  getIntensityFromPGA 
+  calculateBaseGroundMotion, 
+  getCWAIntensity 
 } from "@/lib/earthquakeData";
 
 interface TaiwanCountyMapProps {
@@ -21,7 +21,7 @@ interface TaiwanCountyMapProps {
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.json";
 
-// 🌟 幾何演算法 1：判斷線段交叉 (山脈屏障用)
+// 幾何演算法：判斷線段交叉 (山脈屏障用)
 const ccw = (A: number[], B: number[], C: number[]) => {
   return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0]);
 };
@@ -29,7 +29,7 @@ const checkIntersection = (A: number[], B: number[], C: number[], D: number[]) =
   return ccw(A, C, D) !== ccw(B, C, D) && ccw(A, B, C) !== ccw(A, B, D);
 };
 
-// 🌟 幾何演算法 2：判斷點是否在多邊形內 (射線法 - 盆地共振用)
+// 幾何演算法：判斷點是否在多邊形內 (盆地共振用)
 const isPointInPolygon = (point: number[], vs: number[][]) => {
   let x = point[0], y = point[1];
   let inside = false;
@@ -42,19 +42,19 @@ const isPointInPolygon = (point: number[], vs: number[][]) => {
   return inside;
 };
 
-// 🏔️ 定義：虛擬中央山脈脊線
+// 虛擬中央山脈脊線
 const cmrSegments = [
   [[121.5, 24.5], [121.1, 23.8]], 
   [[121.1, 23.8], [120.7, 22.5]]  
 ];
 
-// 🥣 定義：深層盆地多邊形結界 (Z1.0 幾何共振區)
+// 深層盆地多邊形結界
 const basins = {
   taipei: [
-    [121.4, 25.1], [121.6, 25.1], [121.6, 24.9], [121.4, 24.9] // 台北盆地粗略框線
+    [121.4, 25.1], [121.6, 25.1], [121.6, 24.9], [121.4, 24.9]
   ],
   yilan: [
-    [121.7, 24.8], [121.9, 24.8], [121.9, 24.5], [121.7, 24.5] // 蘭陽平原粗略框線
+    [121.7, 24.8], [121.9, 24.8], [121.9, 24.5], [121.7, 24.5]
   ]
 };
 
@@ -102,11 +102,13 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
   const idwGrid = useMemo(() => {
     if (!epicenterCoords || vs30Data.length === 0 || reportStage !== "EEW") return [];
 
-    // 1. 計算基礎點 PGA + 山脈屏障
+    // 1. 計算基礎點 PGA 與 PGV
     const basePoints = vs30Data.map(point => {
       const [lon, lat, vs30] = point;
       const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
-      let pga = calculatePGA(dist, magnitude, vs30);
+      let gm = calculateBaseGroundMotion(dist, magnitude, vs30);
+      let pga = gm.pga;
+      let pgv = gm.pgv;
 
       const epicPt = [epicenterCoords[0], epicenterCoords[1]];
       const targetPt = [lon, lat];
@@ -119,22 +121,25 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
         }
       }
 
+      // 山脈屏障攔截：加速度(短波)與速度(長波)皆削弱
       if (crossed) {
         pga *= 0.35; 
+        pgv *= 0.40; // PGV 繞射能力稍強，保留多一點點
       }
 
-      return { lon, lat, pga };
+      return { lon, lat, pga, pgv };
     });
 
     const grid = [];
     const step = 0.03; 
     const searchRadiusSq = 0.2; 
 
-    // 2. IDW 空間內插 + 盆地共振爆發
+    // 2. 雙軌 IDW 空間內插
     for (let lon = 119.9; lon <= 122.1; lon += step) {
       for (let lat = 21.8; lat <= 25.4; lat += step) {
         let sumWeight = 0;
-        let sumValue = 0;
+        let sumValuePGA = 0;
+        let sumValuePGV = 0;
 
         for (let i = 0; i < basePoints.length; i++) {
           const bp = basePoints[i];
@@ -143,7 +148,8 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           const distSq = dx * dx + dy * dy;
 
           if (distSq < 0.00001) {
-            sumValue = bp.pga;
+            sumValuePGA = bp.pga;
+            sumValuePGV = bp.pgv;
             sumWeight = 1;
             break;
           }
@@ -151,22 +157,27 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           if (distSq < searchRadiusSq) {
             const w = 1 / distSq;
             sumWeight += w;
-            sumValue += bp.pga * w;
+            sumValuePGA += bp.pga * w;
+            sumValuePGV += bp.pgv * w;
           }
         }
 
         if (sumWeight > 0) {
-          let finalPga = sumValue / sumWeight;
+          let finalPga = sumValuePGA / sumWeight;
+          let finalPgv = sumValuePGV / sumWeight;
           const targetPt = [lon, lat];
 
-          // 🌟 終極殺招：盆地效應 (如果像素掉入盆地，強制爆發 1.8~2.0 倍能量)
+          // 🌟 盆地效應：PGV (速度/長週期) 對盆地深度的放大效應比 PGA 更劇烈！
           if (isPointInPolygon(targetPt, basins.taipei)) {
-            finalPga *= 1.8; // 台北盆地共振放大 1.8 倍
+            finalPga *= 1.8; 
+            finalPgv *= 2.2; // 台北盆地極易誘發低頻共振
           } else if (isPointInPolygon(targetPt, basins.yilan)) {
-            finalPga *= 2.0; // 蘭陽平原極軟弱沖積層放大 2.0 倍
+            finalPga *= 2.0; 
+            finalPgv *= 2.5;
           }
 
-          const intensity = getIntensityFromPGA(finalPga);
+          // 透過 CWA 雙軌標準取得最終震度顏色
+          const intensity = getCWAIntensity(finalPga, finalPgv);
           const color = getIntensityColor(intensity);
           
           if (color !== "#f1f5f9") {
