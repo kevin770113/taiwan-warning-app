@@ -11,11 +11,13 @@ export async function fetchNewsData() {
       return [{ id: 1, source: "系統警告", time: "剛剛", title: "尚未設定新聞 API 金鑰", snippet: "請設定 NEWS_API_KEY 環境變數。" }];
     }
 
-    const query = encodeURIComponent('台海 OR 兩岸 OR 共軍 OR 國軍');
-    // 🚨 終極破壞快取：加上時間戳記 &t=${Date.now()}
-    const url = `https://gnews.io/api/v4/search?q=${query}&lang=zh&in=title,description&max=10&apikey=${apiKey}&t=${Date.now()}`;
+    // 🌟 極簡裸測模式 (Naked Probe)
+    // 拔掉所有的 OR、拔掉 in=title,description、拔掉 country=tw
+    // 只留最簡單的「台灣」兩個字，測試 API 是否還活著
+    const query = encodeURIComponent('台灣');
+    const url = `https://gnews.io/api/v4/search?q=${query}&lang=zh&max=10&apikey=${apiKey}&t=${Date.now()}`;
     
-    // 🚨 告訴 Next.js 這個 fetch 絕對不准存快取 (no-store)
+    // 絕對不准快取
     const res = await fetch(url, { signal: controller.signal, cache: 'no-store' }); 
     if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
     
@@ -30,8 +32,8 @@ export async function fetchNewsData() {
       id: 901,
       source: "除錯：階段一 (API回傳)",
       time: new Date().toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-      title: `原始抓取數量：${rawArticles.length} 篇`,
-      snippet: rawArticles.length > 0 ? `標題包含：${rawArticles.map((a: any) => a.title).join(" ｜ ")}` : "GNews 回傳空陣列 0 篇。"
+      title: `裸測抓取數量：${rawArticles.length} 篇`,
+      snippet: rawArticles.length > 0 ? `標題包含：${rawArticles.map((a: any) => a.title).join(" ｜ ")}` : "GNews 依然回傳空陣列，極大機率已遭隱性封鎖或額度耗盡！"
     });
 
     // 🕵️‍♂️ [除錯階段二：負面詞排除]
@@ -61,7 +63,7 @@ export async function fetchNewsData() {
       source: "除錯：階段三 (正面確認)",
       time: "系統分析中",
       title: `含軍政關鍵字最終剩餘：${finalArticles.length} 篇`,
-      snippet: finalArticles.length > 0 ? `最終輸出：${finalArticles.map((a: any) => a.title).join(" ｜ ")}` : "全軍覆沒，存活的新聞沒有任何一篇包含正面軍政關鍵字。"
+      snippet: finalArticles.length > 0 ? `最終輸出：${finalArticles.map((a: any) => a.title).join(" ｜ ")}` : "全軍覆沒，沒有任何一篇包含正面軍政關鍵字。"
     });
 
     const formattedResults = finalArticles.slice(0, 3).map((article: any, index: number) => ({
