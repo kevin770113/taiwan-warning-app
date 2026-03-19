@@ -5,8 +5,8 @@ export async function fetchMilitaryData() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); 
 
-    // ⚔️ 透過 Google News 代理搜尋，鎖定國防部的官方通報
-    const query = encodeURIComponent('"國防部" ("共機" OR "機艦" OR "擾台" OR "架次")');
+    // ⚔️ 利用強大的代理搜尋引擎
+    const query = encodeURIComponent('"國防部" ("共機" OR "擾台" OR "架次" OR "越線")');
     const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
 
     const res = await fetch(url, { signal: controller.signal, next: { revalidate: 600 } });
@@ -35,17 +35,23 @@ export async function fetchMilitaryData() {
       let sorties = 0;
       let crossed = 0;
 
-      // 1. 捕捉總架次 (例如：偵獲12共機、中共23機艦、33架次)
-      const sortiesMatch1 = titleText.match(/(?:偵獲|中共|共軍|計有)[^\d]*(\d+)[^\d]*(?:共機|機艦|架次|架機)/);
-      const sortiesMatch2 = titleText.match(/(\d+)\s*架次/);
-      if (sortiesMatch1) sorties = parseInt(sortiesMatch1[1]);
-      else if (sortiesMatch2) sorties = parseInt(sortiesMatch2[1]);
+      // 1. 捕捉總架次 (例如：偵獲12共機、33架次、中共23機艦)
+      const sortiesMatch = titleText.match(/(\d+)\s*[架機]/); // 直接找「架」或「機艦」前面的數字
+      if (sortiesMatch) sorties = parseInt(sortiesMatch[1]);
 
-      // 2. 捕捉越線架次 (例如：逾越中線10架次、進入西南空域5共機)
-      const crossedMatch = titleText.match(/(?:逾越|越過|進入|擾台)[^\d]*(\d+)[^\d]*(?:架次|共機|架機)/);
-      if (crossedMatch) crossed = parseInt(crossedMatch[1]);
+      // 2. 捕捉越線架次 (🚨 零妥協進化版：精準狙擊「24架越中線」這類格式)
+      // 模式 A：逾越中線10架次、扰台12共機
+      const crossedMatchA = titleText.match(/(?:逾越|扰台)[^\d]*(\d+)[^\d]*架/); 
+      // 模式 B：(🚨 終極突破)：24架越中線、3架機越線
+      const crossedMatchB = titleText.match(/(\d+)\s*[架機][^>]*越/);
 
-      // 如果有抓到任何數字，或是標題有軍演，才視為有效情報
+      if (crossedMatchA) crossed = parseInt(crossedMatchA[1]);
+      else if (crossedMatchB) crossed = parseInt(crossedMatchB[1]); // 優先級最高
+      
+      // 容錯機制：如果兩者都匹配到同個數字，可能是標題截斷導致，此時 crossed 為 0 或 sorties
+      if (sorties > 0 && crossed > sorties) crossed = 0; // 邏輯檢查
+
+      // 如果抓到任何數字，才視為有效情報
       if (sorties > 0 || crossed > 0 || /(實彈|演習|軍演|聯合戰備)/.test(titleText)) {
         items.push({
           id: count + 1,
@@ -54,20 +60,20 @@ export async function fetchMilitaryData() {
           sorties: sorties,
           crossed: crossed,
           isDrill: /(實彈|演習|軍演|聯合戰備)/.test(titleText),
-          desc: "國防部發布最新共軍台海周邊海空域動態。詳情請參閱完整報導或國防部官網。"
+          desc: "國防部周邊海空域動態。詳情請參閱完整報導。"
         });
         count++;
       }
     }
 
     if (items.length === 0) {
-        return [{ id: 1, date: new Date().toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', hour: "2-digit", minute: "2-digit" }), title: "近期無具體數字之軍事動態", sorties: 0, crossed: 0, isDrill: false, desc: "近期並未偵測到包含具體架次之共機動態通報。" }];
+        return [{ id: 1, date: new Date().toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', hour: "2-digit", minute: "2-digit" }), title: "近期無具體架次之擾台動態", sorties: 0, crossed: 0, isDrill: false, desc: "近期並未偵測到包含具體架次之共機擾台通報。" }];
     }
 
     return items;
 
   } catch (error: any) {
     console.error("❌ 軍事爬蟲發生錯誤:", error.message || error);
-    return [{ id: 1, date: "--", title: "戰術資料連線異常", sorties: 0, crossed: 0, isDrill: false, desc: "無法取得即時軍事動態，可能受防火牆影響。" }];
+    return [{ id: 1, date: "--", title: "資料提煉連線異常", sorties: 0, crossed: 0, isDrill: false, desc: "無法連線至代理搜尋引擎，可能受防火牆影響。" }];
   }
 }
