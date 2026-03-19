@@ -5,57 +5,69 @@ export async function fetchDiplomacyData() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); 
 
-    const url = "https://www.boca.gov.tw/sp-trv-open-data-1.html";
+    // 🤝 外交突破：透過 Google News 代理搜尋官方旅遊警示
+    const query = encodeURIComponent('"外交部" ("旅遊警示" OR "紅色警示" OR "橙色警示" OR "黃色警示")');
+    const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
     
-    // 🛡️ 零妥協防禦突破：加上完整的瀏覽器 Headers 偽裝，避免被當作無頭爬蟲阻擋
-    const res = await fetch(url, { 
-      signal: controller.signal, 
-      next: { revalidate: 3600 },
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/javascript, */*; q=0.01',
-        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Connection': 'keep-alive'
-      }
-    });
-    
+    const res = await fetch(url, { signal: controller.signal, next: { revalidate: 3600 } });
     if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
     
-    const rawData = await res.json();
+    const xmlString = await res.text();
     clearTimeout(timeoutId);
 
-    if (!Array.isArray(rawData)) throw new Error("資料結構異常");
+    const rawAlerts: any[] = [];
+    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+    const titleRegex = /<title>([\s\S]*?)<\/title>/;
+    const pubDateRegex = /<pubDate>([\s\S]*?)<\/pubDate>/;
 
-    const criticalWarnings = rawData.filter((item: any) => {
-      const severity = item.severity || item.alertLevel || item.info || "";
-      return severity.includes("紅色") || severity.includes("橙色") || severity.includes("黃色");
-    });
+    let match;
+    while ((match = itemRegex.exec(xmlString)) !== null) {
+      const itemXml = match[1];
+      const titleMatch = titleRegex.exec(itemXml);
+      if (titleMatch) {
+        rawAlerts.push({
+          title: titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim(),
+          publishedAt: pubDateRegex.exec(itemXml)?.[1] || new Date().toISOString()
+        });
+      }
+    }
 
-    criticalWarnings.sort((a: any, b: any) => {
-       const sA = a.severity || a.alertLevel || "";
-       const sB = b.severity || b.alertLevel || "";
-       const weightA = sA.includes("紅") ? 3 : (sA.includes("橙") ? 2 : 1);
-       const weightB = sB.includes("紅") ? 3 : (sB.includes("橙") ? 2 : 1);
-       return weightB - weightA;
+    // 篩選出真的帶有顏色警示的新聞
+    const criticalWarnings = rawAlerts.filter((item: any) => {
+      const t = item.title;
+      return t.includes("紅色") || t.includes("橙色") || t.includes("黃色");
     });
 
     if (criticalWarnings.length === 0) {
-      return [{ id: 1, country: "全球", flag: "🌍", status: "無重大紅色旅遊警示", level: "normal", time: new Date().toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', hour: "2-digit", minute: "2-digit" }) }];
+      return [{ id: 1, country: "全球", flag: "🌍", status: "無近期重大旅遊警示變更", level: "normal", time: new Date().toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', hour: "2-digit", minute: "2-digit" }) }];
     }
 
+    // 取前 4 筆最新警示，並轉換為 UI 所需的格式
     return criticalWarnings.slice(0, 4).map((item: any, index: number) => {
-      const severity = item.severity || item.alertLevel || "未知警示";
       let uiLevel = "normal";
-      if (severity.includes("紅色") || severity.includes("橙色")) uiLevel = "warning";
-      else if (severity.includes("黃色")) uiLevel = "notice";
+      let statusText = "黃色警示 (注意)";
       
+      if (item.title.includes("紅色")) {
+        uiLevel = "warning";
+        statusText = "紅色警示 (不宜前往)";
+      } else if (item.title.includes("橙色")) {
+        uiLevel = "warning";
+        statusText = "橙色警示 (避免非必要旅行)";
+      } else if (item.title.includes("黃色")) {
+        uiLevel = "notice";
+      }
+      
+      const pubDate = new Date(item.publishedAt);
+      const timeStr = isNaN(pubDate.getTime()) ? "近期" : `${pubDate.getMonth() + 1}/${pubDate.getDate()}`;
+
       return {
         id: index + 1,
-        country: item.country || item.countryName || "未知國家",
-        flag: "⚠️",
-        status: severity,
+        // 直接將標題截斷作為顯示文字 (因為很難完美拆出國家名，保留標題最準確)
+        country: item.title.length > 20 ? item.title.substring(0, 20) + "..." : item.title,
+        flag: uiLevel === "warning" ? "🚫" : "⚠️",
+        status: statusText,
         level: uiLevel,
-        time: "今日更新" 
+        time: timeStr 
       };
     });
 
