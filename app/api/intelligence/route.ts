@@ -5,9 +5,8 @@ import { fetchDiplomacyData } from '@/lib/crawlers/diplomacy';
 import { fetchFinanceData } from '@/lib/crawlers/finance';
 import { fetchNewsData } from '@/lib/crawlers/news';
 
-// 🚨 除錯模式啟動：強制伺服器每次都必須重新執行，絕對不准使用快取！
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// 🌟 恢復正式環境設定：每 600 秒 (10 分鐘) 快取更新一次，保護 API 額度與效能
+export const revalidate = 600;
 
 export async function GET() {
   try {
@@ -23,14 +22,12 @@ export async function GET() {
     const financeData = results[2].status === 'fulfilled' ? results[2].value : [];
     const newsData = results[3].status === 'fulfilled' ? results[3].value : [];
 
-    const responseData = {
+    return NextResponse.json({
       military: militaryData,
       diplomacy: diplomacyData,
       finance: financeData,
       news: newsData,
-    };
-
-    return NextResponse.json(responseData, { status: 200 });
+    }, { status: 200 });
 
   } catch (error) {
     console.error("情報 API 發生未預期的嚴重錯誤:", error);
