@@ -5,7 +5,6 @@ export async function fetchMilitaryData() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); 
 
-    // ⚔️ 利用強大的代理搜尋引擎
     const query = encodeURIComponent('"國防部" ("共機" OR "擾台" OR "架次" OR "越線")');
     const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
 
@@ -31,27 +30,28 @@ export async function fetchMilitaryData() {
       const titleText = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim() : "無標題";
       const dateText = dateMatch ? new Date(dateMatch[1]).toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "近期";
 
-      // 🚨 戰術提煉 v2.0：多重條件捕捉 (容錯率極高)
       let sorties = 0;
       let crossed = 0;
 
-      // 1. 捕捉總架次 (例如：偵獲12共機、33架次、中共23機艦)
-      const sortiesMatch = titleText.match(/(\d+)\s*[架機]/); // 直接找「架」或「機艦」前面的數字
+      // 1. 總架次：抓取常規的「XX架次」、「XX機艦」
+      const sortiesMatch = titleText.match(/(\d+)\s*(?:架次|架機|機|艦)/);
       if (sortiesMatch) sorties = parseInt(sortiesMatch[1]);
 
-      // 2. 捕捉越線架次 (🚨 零妥協進化版：精準狙擊「24架越中線」這類格式)
-      // 模式 A：逾越中線10架次、扰台12共機
-      const crossedMatchA = titleText.match(/(?:逾越|扰台)[^\d]*(\d+)[^\d]*架/); 
-      // 模式 B：(🚨 終極突破)：24架越中線、3架機越線
-      const crossedMatchB = titleText.match(/(\d+)\s*[架機][^>]*越/);
+      // 2. 越線架次：🚨 零妥協「絕對貼身防守」
+      // 模式 A (數字在前)：精準狙擊「24架越中線」、「5架次逾越」 (限制數字跟「越」之間不能超過 5 個字元)
+      const crossedMatchA = titleText.match(/(\d+)\s*(?:架|架次|架機)[^\d]{0,5}(?:越|逾越)/);
+      // 模式 B (文字在前)：精準狙擊「逾越中線10架次」
+      const crossedMatchB = titleText.match(/(?:逾越|越過|越中線|擾台)[^\d]{0,10}(\d+)\s*(?:架|架次|架機)/);
 
-      if (crossedMatchA) crossed = parseInt(crossedMatchA[1]);
-      else if (crossedMatchB) crossed = parseInt(crossedMatchB[1]); // 優先級最高
-      
-      // 容錯機制：如果兩者都匹配到同個數字，可能是標題截斷導致，此時 crossed 為 0 或 sorties
-      if (sorties > 0 && crossed > sorties) crossed = 0; // 邏輯檢查
+      if (crossedMatchA) {
+        crossed = parseInt(crossedMatchA[1]);
+      } else if (crossedMatchB) {
+        crossed = parseInt(crossedMatchB[1]);
+      }
 
-      // 如果抓到任何數字，才視為有效情報
+      // 合理性防呆：如果越線比總數多，且總數不為 0，通常是標題截斷造成的誤判
+      if (sorties > 0 && crossed > sorties) crossed = 0;
+
       if (sorties > 0 || crossed > 0 || /(實彈|演習|軍演|聯合戰備)/.test(titleText)) {
         items.push({
           id: count + 1,
