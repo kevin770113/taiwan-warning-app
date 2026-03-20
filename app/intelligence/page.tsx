@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Crosshair, Globe, TrendingDown, Newspaper, ExternalLink, ShieldAlert, RefreshCw, Info } from "lucide-react";
+import { Crosshair, Globe, TrendingDown, Newspaper, ExternalLink, ShieldAlert, RefreshCw, Info } from "lucide-react";
 import { useIntelligence } from "@/lib/useIntelligence";
 
 export default function IntelligencePage() {
@@ -91,18 +91,19 @@ export default function IntelligencePage() {
               <div className="space-y-3">
                 {data.diplomacy.map((item) => (
                   <div key={item.id} className="bg-white p-4 rounded-2xl shadow-[0_2px_8px_rgb(0,0,0,0.02)] border border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl drop-shadow-sm">{item.flag}</span>
-                      <div>
-                        <h3 className="font-bold text-slate-800 text-sm">{item.country}</h3>
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <span className="text-2xl drop-shadow-sm shrink-0">{item.flag}</span>
+                      <div className="truncate pr-2">
+                        <h3 className="font-bold text-slate-800 text-sm truncate">{item.country}</h3>
                         <p className="text-[11px] text-slate-400 mt-0.5">{item.time} 更新</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                    {/* 🚨 零妥協 UI 修正：加入 whitespace-nowrap 與 shrink-0 拒絕斷行擠壓，並精準映射顏色 */}
+                    <div className="text-right shrink-0">
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full border whitespace-nowrap inline-block ${
                         item.level === "normal" ? "bg-slate-50 text-slate-500 border-slate-200" :
                         item.level === "notice" ? "bg-amber-50 text-amber-600 border-amber-200" :
-                        "bg-orange-50 text-orange-600 border-orange-200"
+                        "bg-rose-50 text-rose-600 border-rose-200"
                       }`}>
                         {item.status}
                       </span>
@@ -162,14 +163,14 @@ export default function IntelligencePage() {
           </div>
         )}
 
-        {/* 🌟 查證來源宣告區塊 (Data Source Footer) */}
+        {/* 🌟 誠實宣告：已全面改用 Google 代理檢索 */}
         <div className="mt-8 pt-4 border-t border-slate-200/60 flex items-center justify-center gap-1.5 text-slate-400">
           <Info size={13} />
           <p className="text-[11px] font-medium tracking-wide">
-            {activeTab === "military" && "資料來源：中華民國國防部 / 中央通訊社"}
-            {activeTab === "diplomacy" && "資料來源：外交部領事事務局 Open Data"}
-            {activeTab === "finance" && "資料來源：台灣證券交易所 / RTER 全球即時匯率 API"}
-            {activeTab === "news" && "資料來源：GNews 即時新聞 / 全球通訊社"}
+            {activeTab === "military" && "資料來源：中華民國國防部 / Google 代理檢索"}
+            {activeTab === "diplomacy" && "資料來源：外交部領事事務局 / Google 代理檢索"}
+            {activeTab === "finance" && "資料來源：台灣證券交易所 / RTER 即時匯率 API"}
+            {activeTab === "news" && "資料來源：Google News RSS / 全球新聞媒體"}
           </p>
         </div>
       </main>
