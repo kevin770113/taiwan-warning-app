@@ -5,8 +5,9 @@ import { fetchDiplomacyData } from '@/lib/crawlers/diplomacy';
 import { fetchFinanceData } from '@/lib/crawlers/finance';
 import { fetchNewsData } from '@/lib/crawlers/news';
 
-// 🌟 恢復正式環境設定：每 600 秒 (10 分鐘) 快取更新一次，保護 API 額度與效能
-export const revalidate = 600;
+// 🚨 暫時強制不快取，打破 Vercel 快取鎖死，確保拿到最新的全球外交警示
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   try {
