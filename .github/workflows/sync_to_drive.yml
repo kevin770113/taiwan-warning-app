@@ -3,7 +3,7 @@ name: Sync to Google Drive
 on:
   push:
     branches:
-      - main  # 當你 push 到 main 分支時觸發
+      - main
 
 jobs:
   upload:
@@ -12,13 +12,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Zip repository  # 將程式碼打包，方便 Gemini 一次讀取，或直接傳散檔
+      - name: Zip repository
         run: zip -r project_code.zip . -x "*.git*"
 
-      - name: Upload to Google Drive
-        uses: adityak74/google-drive-upload-git-action@main
-        with:
-          credentials: ${{ secrets.GDRIVE_CREDENTIALS }}
-          filename: project_code.zip
-          folderId: ${{ secrets.DRIVE_FOLDER_ID }}
-          overwrite: true # 每次都覆蓋舊檔案，保持最新
+      - name: Upload to Google Drive via API
+        env:
+          CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+          FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: |
+          # 1. 向 Google 換取當下有效的臨時上傳權限
+          ACCESS_TOKEN=$(curl -s -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&refresh_token=${REFRESH_TOKEN}&grant_type=refresh_token" \
+            | jq -r .access_token)
+
+          # 2. 正式將壓縮檔上傳到你的雲端硬碟資料夾中
+          curl -X POST -L \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -F "metadata={name : 'taiwan-warning-app.zip', parents: ['$FOLDER_ID']};type=application/json;charset=UTF-8" \
+            -F "file=@project_code.zip" \
+            "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
