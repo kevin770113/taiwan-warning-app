@@ -22,7 +22,6 @@ export async function fetchNewsData() {
     const linkRegex = /<link>([\s\S]*?)<\/link>/;
 
     let match;
-    // 放大母體池到 50 篇，確保有足夠的新聞可以去重
     while ((match = itemRegex.exec(xmlString)) !== null && rawArticles.length < 50) {
       const itemXml = match[1];
       const titleMatch = titleRegex.exec(itemXml);
@@ -41,27 +40,28 @@ export async function fetchNewsData() {
 
     const finalArticles: any[] = [];
 
-    // 🚨 零妥協去重演算法：逐一審查新聞
     for (const article of rawArticles) {
       const contentToSearch = article.title.toLowerCase();
       
-      // 第一關：正負面詞過濾
       if (negativeRegex.test(contentToSearch)) continue;
       if (!positiveRegex.test(contentToSearch)) continue;
 
-      // 第二關：相似度去重 (Jaccard Similarity)
+      // 🚨 第二關：相似度去重 (修正 TypeScript ES5 Set 迭代錯誤)
       let isDuplicate = false;
-      const set1 = new Set(article.title.replace(/[^\u4e00-\u9fa5]/g, '')); // 只提取純中文字
+      const chars1 = article.title.replace(/[^\u4e00-\u9fa5]/g, '').split('');
+      const set1 = new Set<string>(chars1);
       
       for (const existing of finalArticles) {
-        const set2 = new Set(existing.title.replace(/[^\u4e00-\u9fa5]/g, ''));
+        const chars2 = existing.title.replace(/[^\u4e00-\u9fa5]/g, '').split('');
+        const set2 = new Set<string>(chars2);
         let intersection = 0;
-        for (const char of set1) {
+        
+        set1.forEach((char) => {
           if (set2.has(char)) intersection++;
-        }
+        });
+        
         const union = set1.size + set2.size - intersection;
         
-        // 若兩篇標題的中文字重複率超過 45%，視為同一事件
         if (union > 0 && (intersection / union) > 0.45) {
           isDuplicate = true;
           break;
@@ -72,7 +72,6 @@ export async function fetchNewsData() {
         finalArticles.push(article);
       }
 
-      // 只要收集滿 3 篇截然不同的獨立事件就停止
       if (finalArticles.length >= 3) break;
     }
 
