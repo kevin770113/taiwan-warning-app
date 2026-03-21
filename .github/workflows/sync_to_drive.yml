@@ -1,4 +1,4 @@
-name: Sync to Google Drive
+name: Sync Source Code to Google Drive as TXT
 
 on:
   push:
@@ -12,8 +12,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Zip repository
-        run: zip -r project_code.zip . -x "*.git*"
+      - name: Generate Combined TXT with Tree and Size
+        run: |
+          OUTPUT_FILE="project_code.txt"
+          
+          # 建立檔案標頭
+          echo "==================================================" > $OUTPUT_FILE
+          echo " PROJECT SOURCE CODE EXPORT" >> $OUTPUT_FILE
+          echo " Export Time (UTC): $(date)" >> $OUTPUT_FILE
+          echo "==================================================" >> $OUTPUT_FILE
+          echo "" >> $OUTPUT_FILE
+
+          # 1. 產生目錄樹狀圖 (排除不必要的靜態檔與依賴庫)
+          echo "### 1. DIRECTORY TREE ###" >> $OUTPUT_FILE
+          tree -I 'node_modules|.git|.next|dist|build|public|package-lock.json|*.zip|*.png|*.jpg|*.ico|*.svg' >> $OUTPUT_FILE
+          echo "" >> $OUTPUT_FILE
+
+          # 2. 計算原始碼總容量
+          echo "### 2. SOURCE CODE SIZE ###" >> $OUTPUT_FILE
+          TOTAL_SIZE=$(find . -type d \( -name node_modules -o -name .git -o -name .next \) -prune -o -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.json" \) -print0 | du -ch --files0-from=- | grep total$ | awk '{print $1}')
+          echo " Total parsed source code size: $TOTAL_SIZE" >> $OUTPUT_FILE
+          echo "" >> $OUTPUT_FILE
+
+          # 3. 讀取並合併所有核心程式碼，加入明確的分隔標籤
+          echo "### 3. SOURCE CODE FILES ###" >> $OUTPUT_FILE
+          find . -type d \( -name node_modules -o -name .git -o -name .next \) -prune -o -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.json" \) -print | sort | while read -r file; do
+            echo "" >> $OUTPUT_FILE
+            echo "========== FILE: $file ==========" >> $OUTPUT_FILE
+            cat "$file" >> $OUTPUT_FILE
+            echo "" >> $OUTPUT_FILE
+          done
 
       - name: Upload to Google Drive via API
         env:
@@ -22,14 +50,14 @@ jobs:
           REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
           FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
         run: |
-          # 1. 向 Google 換取當下有效的臨時上傳權限
+          # 取得臨時存取權杖 (Access Token)
           ACCESS_TOKEN=$(curl -s -X POST https://oauth2.googleapis.com/token \
             -d "client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&refresh_token=${REFRESH_TOKEN}&grant_type=refresh_token" \
             | jq -r .access_token)
 
-          # 2. 正式將壓縮檔上傳到你的雲端硬碟資料夾中
+          # 上傳純文字檔至指定的 Google Drive 資料夾
           curl -X POST -L \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -F "metadata={name : 'taiwan-warning-app.zip', parents: ['$FOLDER_ID']};type=application/json;charset=UTF-8" \
-            -F "file=@project_code.zip" \
+            -F "metadata={name : 'taiwan-warning-app-code.txt', parents: ['$FOLDER_ID']};type=application/json;charset=UTF-8" \
+            -F "file=@project_code.txt" \
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
