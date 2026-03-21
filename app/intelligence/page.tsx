@@ -98,12 +98,13 @@ export default function IntelligencePage() {
                         <p className="text-[11px] text-slate-400 mt-0.5">{item.time} 更新</p>
                       </div>
                     </div>
-                    {/* 🚨 零妥協 UI 修正：加入 whitespace-nowrap 與 shrink-0 拒絕斷行擠壓，並精準映射顏色 */}
+                    {/* 🚨 零妥協 UI：4級顏色解耦、不斷行防禦 */}
                     <div className="text-right shrink-0">
                       <span className={`text-xs font-bold px-2.5 py-1 rounded-full border whitespace-nowrap inline-block ${
-                        item.level === "normal" ? "bg-slate-50 text-slate-500 border-slate-200" :
+                        item.level === "critical" ? "bg-rose-50 text-rose-600 border-rose-200" :
+                        item.level === "warning" ? "bg-orange-50 text-orange-600 border-orange-200" :
                         item.level === "notice" ? "bg-amber-50 text-amber-600 border-amber-200" :
-                        "bg-rose-50 text-rose-600 border-rose-200"
+                        "bg-slate-50 text-slate-500 border-slate-200"
                       }`}>
                         {item.status}
                       </span>
@@ -167,10 +168,10 @@ export default function IntelligencePage() {
         <div className="mt-8 pt-4 border-t border-slate-200/60 flex items-center justify-center gap-1.5 text-slate-400">
           <Info size={13} />
           <p className="text-[11px] font-medium tracking-wide">
-            {activeTab === "military" && "資料來源：中華民國國防部 / Google 代理檢索"}
-            {activeTab === "diplomacy" && "資料來源：外交部領事事務局 / Google 代理檢索"}
+            {activeTab === "military" && "資料來源：國防部 / Google 代理檢索"}
+            {activeTab === "diplomacy" && "資料來源：陸委會/外交部 / Google 代理檢索"}
             {activeTab === "finance" && "資料來源：台灣證券交易所 / RTER 即時匯率 API"}
-            {activeTab === "news" && "資料來源：Google News RSS / 全球新聞媒體"}
+            {activeTab === "news" && "資料來源：Google News RSS / 全球媒體"}
           </p>
         </div>
       </main>
