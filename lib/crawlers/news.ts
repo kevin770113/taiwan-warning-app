@@ -46,13 +46,15 @@ export async function fetchNewsData() {
       if (negativeRegex.test(contentToSearch)) continue;
       if (!positiveRegex.test(contentToSearch)) continue;
 
-      // 🚨 第二關：相似度去重 (修正 TypeScript ES5 Set 迭代錯誤)
+      // 🚨 零妥協去重：先砍掉媒體名稱尾綴，再進行純中文字元比對
       let isDuplicate = false;
-      const chars1 = article.title.replace(/[^\u4e00-\u9fa5]/g, '').split('');
+      const cleanTitle1 = article.title.replace(/\s*[-|｜_]\s*[^-|｜_]+$/, ''); // 砍掉 " - 媒體名"
+      const chars1 = cleanTitle1.replace(/[^\u4e00-\u9fa5]/g, '').split('');
       const set1 = new Set<string>(chars1);
       
       for (const existing of finalArticles) {
-        const chars2 = existing.title.replace(/[^\u4e00-\u9fa5]/g, '').split('');
+        const cleanTitle2 = existing.title.replace(/\s*[-|｜_]\s*[^-|｜_]+$/, '');
+        const chars2 = cleanTitle2.replace(/[^\u4e00-\u9fa5]/g, '').split('');
         const set2 = new Set<string>(chars2);
         let intersection = 0;
         
@@ -62,7 +64,8 @@ export async function fetchNewsData() {
         
         const union = set1.size + set2.size - intersection;
         
-        if (union > 0 && (intersection / union) > 0.45) {
+        // 🚨 門檻調降至 30% (0.3)，只要核心字眼重疊就視為同一新聞捨棄
+        if (union > 0 && (intersection / union) > 0.30) {
           isDuplicate = true;
           break;
         }
