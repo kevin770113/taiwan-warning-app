@@ -5,11 +5,9 @@ export async function fetchDiplomacyData() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); 
 
-    // 🤝 零妥協情報源：納入管轄兩岸的「陸委會」，並限縮在兩岸/港澳等標的
     const query = encodeURIComponent('"旅遊警示" ("陸委會" OR "外交部") ("中國" OR "大陸" OR "港澳" OR "台灣")');
     const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
     
-    // 依然設定 1 小時快取
     const res = await fetch(url, { signal: controller.signal, next: { revalidate: 3600 } }); 
     if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
     
@@ -33,7 +31,6 @@ export async function fetchDiplomacyData() {
       }
     }
 
-    // ⚔️ 地圖炮級負面過濾：絕對不允許中東戰火與娛樂新聞混入
     const negativeRegex = /(中東|以色列|巴林|黎巴嫩|伊朗|加薩|遊戲|娛樂|動漫|電競|影劇|手遊|虛擬|真人版|航海王|演唱會|賽季|抽卡|粉絲|明星|八卦|網紅)/;
     
     const filteredAlerts = rawAlerts.filter((item: any) => {
@@ -46,13 +43,11 @@ export async function fetchDiplomacyData() {
       return [{ id: 1, country: "兩岸與周邊地區", flag: "🌍", status: "近期無重大旅遊警示變更", level: "normal", time: new Date().toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', hour: "2-digit", minute: "2-digit" }) }];
     }
 
-    // 取前 4 筆最新警示，並解耦為 4 個精準的 UI 狀態合約
     return filteredAlerts.slice(0, 4).map((item: any, index: number) => {
       let uiLevel = "normal";
       let statusText = "黃色警示 (注意)";
       let flagIcon = "❕";
       
-      // 🚨 狀態嚴格分級
       if (item.title.includes("紅色")) {
         uiLevel = "critical";
         statusText = "紅色警示 (不宜前往)";
@@ -72,7 +67,8 @@ export async function fetchDiplomacyData() {
 
       return {
         id: index + 1,
-        country: item.title.length > 22 ? item.title.substring(0, 22) + "..." : item.title,
+        // 🚨 零妥協：解除字數封印，原汁原味交給前端 Flexbox 處理
+        country: item.title, 
         flag: flagIcon,
         status: statusText,
         level: uiLevel,
