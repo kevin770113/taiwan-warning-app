@@ -91,14 +91,14 @@ export default function IntelligencePage() {
               <div className="space-y-3">
                 {data.diplomacy.map((item) => (
                   <div key={item.id} className="bg-white p-4 rounded-2xl shadow-[0_2px_8px_rgb(0,0,0,0.02)] border border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3 overflow-hidden">
+                    {/* 🚨 零妥協 UI：加上 flex-1 與 min-w-0 絕對防止 Flexbox 擠壓崩潰 */}
+                    <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0 pr-3">
                       <span className="text-2xl drop-shadow-sm shrink-0">{item.flag}</span>
-                      <div className="truncate pr-2">
+                      <div className="truncate min-w-0 flex-1">
                         <h3 className="font-bold text-slate-800 text-sm truncate">{item.country}</h3>
                         <p className="text-[11px] text-slate-400 mt-0.5">{item.time} 更新</p>
                       </div>
                     </div>
-                    {/* 🚨 零妥協 UI：4級顏色解耦、不斷行防禦 */}
                     <div className="text-right shrink-0">
                       <span className={`text-xs font-bold px-2.5 py-1 rounded-full border whitespace-nowrap inline-block ${
                         item.level === "critical" ? "bg-rose-50 text-rose-600 border-rose-200" :
@@ -122,8 +122,9 @@ export default function IntelligencePage() {
                       <h3 className="font-bold text-slate-600 text-xs mb-1">{item.name}</h3>
                       <p className="text-2xl font-black text-slate-800">{item.value}</p>
                     </div>
-                    <div className={`text-right flex flex-col items-end ${item.isDown ? "text-rose-500" : "text-emerald-500"}`}>
-                      <span className="text-sm font-bold bg-slate-50 px-2 py-0.5 rounded flex items-center gap-1">
+                    {/* 🚨 零妥協文化在地化：台股慣例，紅漲綠跌 */}
+                    <div className={`text-right flex flex-col items-end ${item.isDown ? "text-emerald-500" : "text-rose-500"}`}>
+                      <span className={`text-sm font-bold px-2 py-0.5 rounded flex items-center gap-1 ${item.isDown ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>
                         {item.isDown ? <TrendingDown size={14} /> : <TrendingDown size={14} className="rotate-180" />}
                         {item.percent}
                       </span>
@@ -164,7 +165,6 @@ export default function IntelligencePage() {
           </div>
         )}
 
-        {/* 🌟 誠實宣告：已全面改用 Google 代理檢索 */}
         <div className="mt-8 pt-4 border-t border-slate-200/60 flex items-center justify-center gap-1.5 text-slate-400">
           <Info size={13} />
           <p className="text-[11px] font-medium tracking-wide">
