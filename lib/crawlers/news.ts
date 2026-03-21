@@ -8,7 +8,6 @@ export async function fetchNewsData() {
     const query = encodeURIComponent('台海 OR 兩岸 OR 共軍 OR 國軍 OR 國防部');
     const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
     
-    // 恢復 Vercel 原生快取機制
     const res = await fetch(url, { signal: controller.signal, next: { revalidate: 600 } }); 
     if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
     
@@ -23,7 +22,8 @@ export async function fetchNewsData() {
     const linkRegex = /<link>([\s\S]*?)<\/link>/;
 
     let match;
-    while ((match = itemRegex.exec(xmlString)) !== null && rawArticles.length < 40) {
+    // 放大母體池到 50 篇，確保有足夠的新聞可以去重
+    while ((match = itemRegex.exec(xmlString)) !== null && rawArticles.length < 50) {
       const itemXml = match[1];
       const titleMatch = titleRegex.exec(itemXml);
       if (titleMatch) {
@@ -39,16 +39,48 @@ export async function fetchNewsData() {
     const negativeRegex = /(遊戲|娛樂|動漫|電競|影劇|手遊|虛擬|真人版|航海王|抽卡|粉絲|明星|八卦|網紅|實況|長江存儲|消費級|體育|職棒|職籃|演唱會|賽季)/;
     const positiveRegex = /(台海|兩岸|國防|國軍|共軍|軍演|外交|地緣政治|解放軍|國安|軍事|戰機|艦艇|中共)/;
 
-    const finalArticles = rawArticles.filter((article: any) => {
+    const finalArticles: any[] = [];
+
+    // 🚨 零妥協去重演算法：逐一審查新聞
+    for (const article of rawArticles) {
       const contentToSearch = article.title.toLowerCase();
-      return !negativeRegex.test(contentToSearch) && positiveRegex.test(contentToSearch);
-    });
+      
+      // 第一關：正負面詞過濾
+      if (negativeRegex.test(contentToSearch)) continue;
+      if (!positiveRegex.test(contentToSearch)) continue;
+
+      // 第二關：相似度去重 (Jaccard Similarity)
+      let isDuplicate = false;
+      const set1 = new Set(article.title.replace(/[^\u4e00-\u9fa5]/g, '')); // 只提取純中文字
+      
+      for (const existing of finalArticles) {
+        const set2 = new Set(existing.title.replace(/[^\u4e00-\u9fa5]/g, ''));
+        let intersection = 0;
+        for (const char of set1) {
+          if (set2.has(char)) intersection++;
+        }
+        const union = set1.size + set2.size - intersection;
+        
+        // 若兩篇標題的中文字重複率超過 45%，視為同一事件
+        if (union > 0 && (intersection / union) > 0.45) {
+          isDuplicate = true;
+          break;
+        }
+      }
+
+      if (!isDuplicate) {
+        finalArticles.push(article);
+      }
+
+      // 只要收集滿 3 篇截然不同的獨立事件就停止
+      if (finalArticles.length >= 3) break;
+    }
 
     if (finalArticles.length === 0) {
         return [{ id: 1, source: "系統回報", time: new Date().toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', hour: "2-digit", minute: "2-digit" }), title: "目前無重大台海新聞", snippet: "近期並未偵測到值得警戒的局勢新聞。" }];
     }
 
-    return finalArticles.slice(0, 3).map((article: any, index: number) => {
+    return finalArticles.map((article: any, index: number) => {
       const pubDate = new Date(article.publishedAt);
       return {
         id: index + 1,
