@@ -1,5 +1,15 @@
 // 檔案：lib/crawlers/news.ts
 
+// 🚨 輔助演算法：將字串拆解成 Bi-gram (雙字詞) 集合
+function getBiGrams(text: string): Set<string> {
+  const chars = text.replace(/[^\u4e00-\u9fa5]/g, ''); // 只保留純中文
+  const bigrams = new Set<string>();
+  for (let i = 0; i < chars.length - 1; i++) {
+    bigrams.add(chars.substring(i, i + 2));
+  }
+  return bigrams;
+}
+
 export async function fetchNewsData() {
   try {
     const controller = new AbortController();
@@ -46,26 +56,26 @@ export async function fetchNewsData() {
       if (negativeRegex.test(contentToSearch)) continue;
       if (!positiveRegex.test(contentToSearch)) continue;
 
-      // 🚨 零妥協去重：先砍掉媒體名稱尾綴，再進行純中文字元比對
       let isDuplicate = false;
-      const cleanTitle1 = article.title.replace(/\s*[-|｜_]\s*[^-|｜_]+$/, ''); // 砍掉 " - 媒體名"
-      const chars1 = cleanTitle1.replace(/[^\u4e00-\u9fa5]/g, '').split('');
-      const set1 = new Set<string>(chars1);
+      const cleanTitle1 = article.title.replace(/\s*[-|｜_]\s*[^-|｜_]+$/, '');
+      const set1 = getBiGrams(cleanTitle1); // 取得 Bi-gram 集合
       
       for (const existing of finalArticles) {
         const cleanTitle2 = existing.title.replace(/\s*[-|｜_]\s*[^-|｜_]+$/, '');
-        const chars2 = cleanTitle2.replace(/[^\u4e00-\u9fa5]/g, '').split('');
-        const set2 = new Set<string>(chars2);
-        let intersection = 0;
+        const set2 = getBiGrams(cleanTitle2);
         
-        set1.forEach((char) => {
-          if (set2.has(char)) intersection++;
+        if (set1.size === 0 || set2.size === 0) continue;
+
+        let intersection = 0;
+        set1.forEach((bg) => {
+          if (set2.has(bg)) intersection++;
         });
         
-        const union = set1.size + set2.size - intersection;
+        // 🚨 零妥協去重：使用 Overlap Coefficient (交集 ÷ 兩者較短的長度)
+        const overlap = intersection / Math.min(set1.size, set2.size);
         
-        // 🚨 門檻調降至 30% (0.3)，只要核心字眼重疊就視為同一新聞捨棄
-        if (union > 0 && (intersection / union) > 0.30) {
+        // 只要有 50% 的雙字詞重疊，立刻判定為重複新聞
+        if (overlap > 0.50) {
           isDuplicate = true;
           break;
         }
