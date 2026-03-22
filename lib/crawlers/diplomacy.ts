@@ -16,16 +16,36 @@ export async function fetchDiplomacyData() {
 
     const rawAlerts: any[] = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-    const titleRegex = /<title>([\s\S]*?)<\/title>/;
+    const descRegex = /<description>([\s\S]*?)<\/description>/;
     const pubDateRegex = /<pubDate>([\s\S]*?)<\/pubDate>/;
 
     let match;
     while ((match = itemRegex.exec(xmlString)) !== null) {
       const itemXml = match[1];
-      const titleMatch = titleRegex.exec(itemXml);
-      if (titleMatch) {
+      const descMatch = descRegex.exec(itemXml);
+      let fullTitle = "";
+
+      // 🚨 零妥協萃取：潛入 description 挖出被 a 標籤包覆的「無截斷完整標題」
+      if (descMatch) {
+        const aTagMatch = /<a[^>]*>([\s\S]*?)<\/a>/.exec(descMatch[1]);
+        if (aTagMatch) {
+          // 清除 CDATA 與殘留的 HTML 標籤
+          fullTitle = aTagMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").trim();
+        }
+      }
+
+      // 備案：如果 description 萃取失敗，才退回使用可能被截斷的 title
+      if (!fullTitle) {
+        const titleMatch = /<title>([\s\S]*?)<\/title>/.exec(itemXml);
+        if (titleMatch) fullTitle = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim();
+      }
+
+      // 清理：順手砍掉 " - 媒體名稱"，讓警示文字更純粹
+      fullTitle = fullTitle.replace(/\s*[-|｜_]\s*[^-|｜_]+$/, '');
+
+      if (fullTitle) {
         rawAlerts.push({
-          title: titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim(),
+          title: fullTitle,
           publishedAt: pubDateRegex.exec(itemXml)?.[1] || new Date().toISOString()
         });
       }
@@ -67,7 +87,6 @@ export async function fetchDiplomacyData() {
 
       return {
         id: index + 1,
-        // 🚨 零妥協：解除字數封印，原汁原味交給前端 Flexbox 處理
         country: item.title, 
         flag: flagIcon,
         status: statusText,
