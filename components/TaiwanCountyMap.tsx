@@ -9,6 +9,7 @@ import {
   normalizeCountyName, 
   normalizeName, 
   calculateDistance, 
+  calculateBearing, 
   calculateBaseGroundMotion, 
   getCWAIntensity 
 } from "@/lib/earthquakeData";
@@ -22,13 +23,6 @@ interface TaiwanCountyMapProps {
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.json";
 
-const ccw = (A: number[], B: number[], C: number[]) => {
-  return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0]);
-};
-const checkIntersection = (A: number[], B: number[], C: number[], D: number[]) => {
-  return ccw(A, C, D) !== ccw(B, C, D) && ccw(A, B, C) !== ccw(A, B, D);
-};
-
 const isPointInPolygon = (point: number[], vs: number[][]) => {
   let x = point[0], y = point[1];
   let inside = false;
@@ -41,21 +35,15 @@ const isPointInPolygon = (point: number[], vs: number[][]) => {
   return inside;
 };
 
-const cmrSegments = [
-  [[121.5, 24.5], [121.1, 23.8]], 
-  [[121.1, 23.8], [120.7, 22.5]]  
-];
-
 const basins = {
   taipei: [[121.4, 25.1], [121.6, 25.1], [121.6, 24.9], [121.4, 24.9]],
   yilan: [[121.7, 24.8], [121.9, 24.8], [121.9, 24.5], [121.7, 24.5]]
 };
 
-// 🚨 導入現實天花板標準：根據規模硬性限制公式可畫出的最大震度
 const INTENSITY_LEVELS = ['0', '1', '2', '3', '4', '5-', '5+', '6-', '6+', '7'];
 const getMaxExpectedIntensity = (mag: number) => {
   if (mag < 4.5) return '3';
-  if (mag < 5.2) return '4';   // 規模 5.0 最高只准畫到 4 級！
+  if (mag < 5.2) return '4';   
   if (mag < 5.8) return '5-';
   if (mag < 6.4) return '5+';
   if (mag < 7.0) return '6-';
@@ -104,7 +92,6 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
     const matchCountyKey = Object.keys(intensities).find(k => k.replace(/[縣市]$/, "") === strippedCounty);
     if (matchCountyKey) return getIntensityColor(intensities[matchCountyKey]);
 
-    // 🚨 破除隱形迷彩：將無震度區域的底色改為實體淺灰 (#e5e5e5)
     return "#e5e5e5"; 
   };
 
@@ -117,26 +104,14 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
       const [lon, lat, vs30] = point;
       const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
       
-      let gm = calculateBaseGroundMotion(magnitude, dist, 10); 
-      let siteAmp = vs30 < 300 ? 1.5 : (vs30 < 500 ? 1.2 : 1.0);
+      // 🚀 注入靈魂：計算方位角，傳遞給 GMPE 引擎
+      const bearing = calculateBearing(epicenterCoords[1], epicenterCoords[0], lat, lon);
+      let gm = calculateBaseGroundMotion(magnitude, dist, 10, bearing); 
+      
+      // 適度調降軟弱地層的誇張放大係數，使其更貼合現實
+      let siteAmp = vs30 < 250 ? 1.4 : (vs30 < 400 ? 1.2 : 1.0);
       let pga = gm.pga * siteAmp;
       let pgv = gm.pgv * siteAmp;
-
-      const epicPt = [epicenterCoords[0], epicenterCoords[1]];
-      const targetPt = [lon, lat];
-      let crossed = false;
-      
-      for (const seg of cmrSegments) {
-        if (checkIntersection(epicPt, targetPt, seg[0], seg[1])) {
-          crossed = true;
-          break;
-        }
-      }
-
-      if (crossed) {
-        pga *= 0.35; 
-        pgv *= 0.40; 
-      }
 
       return { lon, lat, pga, pgv };
     });
@@ -178,16 +153,15 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           const targetPt = [lon, lat];
 
           if (isPointInPolygon(targetPt, basins.taipei)) {
-            finalPga *= 1.8;
-            finalPgv *= 2.2; 
+            finalPga *= 1.5; // 調降盆地共振乘數
+            finalPgv *= 1.8; 
           } else if (isPointInPolygon(targetPt, basins.yilan)) {
-            finalPga *= 2.0;
-            finalPgv *= 2.5;
+            finalPga *= 1.6;
+            finalPgv *= 2.0;
           }
 
           let intensity = getCWAIntensity(finalPga, finalPgv);
 
-          // 🚨 強制削平：不讓公式算出來的震度超過物理天花板
           if (INTENSITY_LEVELS.indexOf(intensity) > INTENSITY_LEVELS.indexOf(maxIntensityCeiling)) {
             intensity = maxIntensityCeiling;
           }
@@ -233,12 +207,7 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           <g mask="url(#taiwan-mask)" opacity={0.85}>
             {idwGrid.map((pt, index) => (
               <Marker key={index} coordinates={[pt.lon, pt.lat]}>
-                <rect 
-                  x={-5} y={-5} width={10} height={10} 
-                  fill={pt.color} 
-                  stroke={pt.color} 
-                  strokeWidth={0.5} 
-                />
+                <rect x={-5} y={-5} width={10} height={10} fill={pt.color} stroke={pt.color} strokeWidth={0.5} />
               </Marker>
             ))}
           </g>
@@ -276,12 +245,10 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
               <animate attributeName="r" values={`0; ${heartbeatMaxR}`} dur="3.5s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.8; 0" dur="3.5s" repeatCount="indefinite" />
             </circle>
-
             <circle r="0" fill="none" stroke="#ef4444" strokeWidth="2.5">
               <animate attributeName="r" values={`0; ${heartbeatMaxR}`} dur="3.5s" begin="0.5s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.8; 0" dur="3.5s" begin="0.5s" repeatCount="indefinite" />
             </circle>
-
             <circle r={3.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
           </Marker>
         )}
