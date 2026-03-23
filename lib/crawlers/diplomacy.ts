@@ -1,73 +1,67 @@
 // 檔案：lib/crawlers/diplomacy.ts
 
-// 🚨 輔助演算法：反跳脫 HTML，破解 Google News 的 XML 防護罩
-function unescapeHTML(str: string) {
-  return str
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&')
-    .replace(/&#39;/g, "'");
-}
-
 export async function fetchDiplomacyData() {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); 
 
-    const query = encodeURIComponent('"旅遊警示" ("陸委會" OR "外交部") ("中國" OR "大陸" OR "港澳" OR "台灣")');
-    const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
-    
-    // 🚨 暴力破除快取：設定 cache: 'no-store'，強迫 Vercel 放棄舊的殘缺資料
-    const res = await fetch(url, { signal: controller.signal, cache: 'no-store' }); 
-    if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-    
-    const xmlString = await res.text();
-    clearTimeout(timeoutId);
-
     const rawAlerts: any[] = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-    const descRegex = /<description>([\s\S]*?)<\/description>/;
     const titleRegex = /<title>([\s\S]*?)<\/title>/;
     const pubDateRegex = /<pubDate>([\s\S]*?)<\/pubDate>/;
 
-    let match;
-    while ((match = itemRegex.exec(xmlString)) !== null) {
-      const itemXml = match[1];
-      const descMatch = descRegex.exec(itemXml);
-      let fullTitle = "";
-
-      // 1. 優先從 description 萃取完整無截斷的標題
-      if (descMatch) {
-        const unescapedDesc = unescapeHTML(descMatch[1]); // 反跳脫
-        const aTagMatch = /<a[^>]*>([\s\S]*?)<\/a>/.exec(unescapedDesc);
-        if (aTagMatch) {
-          fullTitle = aTagMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").trim();
-        }
-      }
-
-      // 2. 備案：如果萃取失敗，才退回抓取 title
-      if (!fullTitle) {
+    // 🚀 戰略一：直搗黃龍！透過 AllOrigins 代理，直接向外交部官方要完整 RSS
+    const bocaRssUrl = 'https://www.boca.gov.tw/sp-trwa-rss-1.html';
+    const proxyBocaUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(bocaRssUrl)}`;
+    
+    // 暴力破除快取，保證拿最新官方資料
+    const resBoca = await fetch(proxyBocaUrl, { signal: controller.signal, cache: 'no-store' }); 
+    
+    if (resBoca.ok) {
+      const xmlBoca = await resBoca.text();
+      let matchBoca;
+      while ((matchBoca = itemRegex.exec(xmlBoca)) !== null) {
+        const itemXml = matchBoca[1];
         const titleMatch = titleRegex.exec(itemXml);
         if (titleMatch) {
-          fullTitle = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim();
+          // 官方 RSS 標題非常乾淨且絕不截斷，直接收錄！
+          rawAlerts.push({
+            title: titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim(),
+            publishedAt: pubDateRegex.exec(itemXml)?.[1] || new Date().toISOString()
+          });
         }
-      }
-
-      // 🚨 雙重清洗：砍掉 " - 媒體名"，並且強制削掉尾巴的 ... 或 …
-      fullTitle = fullTitle.replace(/\s*[-|｜_]\s*[^-|｜_]+$/, '');
-      fullTitle = fullTitle.replace(/[\.…]+$/, '').trim();
-
-      if (fullTitle) {
-        rawAlerts.push({
-          title: fullTitle,
-          publishedAt: pubDateRegex.exec(itemXml)?.[1] || new Date().toISOString()
-        });
       }
     }
 
-    const negativeRegex = /(中東|以色列|巴林|黎巴嫩|伊朗|加薩|遊戲|娛樂|動漫|電競|影劇|手遊|虛擬|真人版|航海王|演唱會|賽季|抽卡|粉絲|明星|八卦|網紅)/;
-    
+    // 🚀 戰略一 (擴充)：外交部不含中國港澳，我們用代理發動第二路抓取陸委會最新動態 (使用不愛截斷的 Bing News)
+    const macSearchUrl = 'https://www.bing.com/news/search?q="旅遊警示"+"陸委會"&format=rss';
+    const proxyMacUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(macSearchUrl)}`;
+
+    try {
+      const resMac = await fetch(proxyMacUrl, { cache: 'no-store' });
+      if (resMac.ok) {
+        const xmlMac = await resMac.text();
+        let matchMac;
+        while ((matchMac = itemRegex.exec(xmlMac)) !== null) {
+          const macTitleMatch = titleRegex.exec(matchMac[1]);
+          if (macTitleMatch) {
+            let macTitle = macTitleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim();
+            macTitle = macTitle.replace(/\s*[-|｜_]\s*[^-|｜_]+$/, ''); // 砍掉媒體尾巴
+            rawAlerts.push({
+              title: macTitle,
+              publishedAt: pubDateRegex.exec(matchMac[1])?.[1] || new Date().toISOString()
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("陸委會輔助抓取失敗，但外交部資料不受影響", e);
+    }
+
+    clearTimeout(timeoutId);
+
+    // ⚔️ 過濾條件：保留紅色、橙色、黃色，並排除娛樂雜訊
+    const negativeRegex = /(遊戲|娛樂|動漫|電競|影劇|手遊|虛擬|真人版|航海王|演唱會|賽季|抽卡|粉絲|明星|八卦|網紅)/;
     const filteredAlerts = rawAlerts.filter((item: any) => {
       const t = item.title;
       if (negativeRegex.test(t)) return false; 
@@ -75,9 +69,10 @@ export async function fetchDiplomacyData() {
     });
 
     if (filteredAlerts.length === 0) {
-      return [{ id: 1, country: "兩岸與周邊地區", flag: "🌍", status: "近期無重大旅遊警示變更", level: "normal", time: new Date().toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', hour: "2-digit", minute: "2-digit" }) }];
+      return [{ id: 1, country: "兩岸與全球", flag: "🌍", status: "無近期重大旅遊警示", level: "normal", time: new Date().toLocaleTimeString("zh-TW", { timeZone: 'Asia/Taipei', hour: "2-digit", minute: "2-digit" }) }];
     }
 
+    // 取前 4 筆，並進行嚴格的狀態解耦
     return filteredAlerts.slice(0, 4).map((item: any, index: number) => {
       let uiLevel = "normal";
       let statusText = "黃色警示 (注意)";
@@ -100,9 +95,17 @@ export async function fetchDiplomacyData() {
       const pubDate = new Date(item.publishedAt);
       const timeStr = isNaN(pubDate.getTime()) ? "近期" : `${pubDate.getMonth() + 1}/${pubDate.getDate()}`;
 
+      // 提取官方標題中的國家名稱 (通常格式如：【紅色警示】以色列)
+      let displayCountry = item.title;
+      const extractMatch = item.title.match(/(?:】|\]|\s|^)([^\s【】\[\]\-]+)\s*(?:\(|（|\-|紅色|橙色|黃色)/);
+      if (extractMatch && extractMatch[1]) {
+         displayCountry = extractMatch[1]; // 盡量只顯示乾淨的國家名
+      }
+
       return {
         id: index + 1,
-        country: item.title, 
+        // 如果提取失敗，就直接顯示官方的一字不漏完整標題
+        country: displayCountry.length > 3 ? displayCountry : item.title, 
         flag: flagIcon,
         status: statusText,
         level: uiLevel,
@@ -112,6 +115,6 @@ export async function fetchDiplomacyData() {
 
   } catch (error) {
     console.error("❌ 外交爬蟲發生錯誤:", error);
-    return [{ id: 1, country: "連線異常", flag: "📡", status: "無法代理取得陸委會/外交部資料", level: "normal", time: "--" }];
+    return [{ id: 1, country: "連線異常", flag: "📡", status: "無法代理取得官方資料", level: "normal", time: "--" }];
   }
 }
