@@ -5,7 +5,7 @@ import { fetchDiplomacyData } from '@/lib/crawlers/diplomacy';
 import { fetchFinanceData } from '@/lib/crawlers/finance';
 import { fetchNewsData } from '@/lib/crawlers/news';
 
-// 🚨 暫時強制不快取，打破 Vercel 快取鎖死，確保拿到最新的全球外交警示
+// 🚨 徹底放棄靜態快取，確保所有情報永遠是最新即時抓取
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
