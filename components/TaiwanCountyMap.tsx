@@ -22,7 +22,6 @@ interface TaiwanCountyMapProps {
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.json";
 
-// 幾何演算法：判斷線段交叉 (山脈屏障用)
 const ccw = (A: number[], B: number[], C: number[]) => {
   return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0]);
 };
@@ -30,7 +29,6 @@ const checkIntersection = (A: number[], B: number[], C: number[], D: number[]) =
   return ccw(A, C, D) !== ccw(B, C, D) && ccw(A, B, C) !== ccw(A, B, D);
 };
 
-// 幾何演算法：判斷點是否在多邊形內 (盆地共振用)
 const isPointInPolygon = (point: number[], vs: number[][]) => {
   let x = point[0], y = point[1];
   let inside = false;
@@ -43,20 +41,25 @@ const isPointInPolygon = (point: number[], vs: number[][]) => {
   return inside;
 };
 
-// 虛擬中央山脈脊線
 const cmrSegments = [
   [[121.5, 24.5], [121.1, 23.8]], 
   [[121.1, 23.8], [120.7, 22.5]]  
 ];
 
-// 深層盆地多邊形結界
 const basins = {
-  taipei: [
-    [121.4, 25.1], [121.6, 25.1], [121.6, 24.9], [121.4, 24.9]
-  ],
-  yilan: [
-    [121.7, 24.8], [121.9, 24.8], [121.9, 24.5], [121.7, 24.5]
-  ]
+  taipei: [[121.4, 25.1], [121.6, 25.1], [121.6, 24.9], [121.4, 24.9]],
+  yilan: [[121.7, 24.8], [121.9, 24.8], [121.9, 24.5], [121.7, 24.5]]
+};
+
+// 🚨 導入現實天花板標準：根據規模硬性限制公式可畫出的最大震度
+const INTENSITY_LEVELS = ['0', '1', '2', '3', '4', '5-', '5+', '6-', '6+', '7'];
+const getMaxExpectedIntensity = (mag: number) => {
+  if (mag < 4.5) return '3';
+  if (mag < 5.2) return '4';   // 規模 5.0 最高只准畫到 4 級！
+  if (mag < 5.8) return '5-';
+  if (mag < 6.4) return '5+';
+  if (mag < 7.0) return '6-';
+  return '7';
 };
 
 export default function TaiwanCountyMap({ reportStage, magnitude, intensities = {}, epicenterCoords }: TaiwanCountyMapProps) {
@@ -101,19 +104,20 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
     const matchCountyKey = Object.keys(intensities).find(k => k.replace(/[縣市]$/, "") === strippedCounty);
     if (matchCountyKey) return getIntensityColor(intensities[matchCountyKey]);
 
-    // 🚨 終極修復：無震度區域的底色改為乾淨的微暖白 (#f8fafc)
-    return "#f8fafc"; 
+    // 🚨 破除隱形迷彩：將無震度區域的底色改為實體淺灰 (#e5e5e5)
+    return "#e5e5e5"; 
   };
 
   const idwGrid = useMemo(() => {
     if (!epicenterCoords || vs30Data.length === 0 || reportStage !== "EEW") return [];
+
+    const maxIntensityCeiling = getMaxExpectedIntensity(magnitude);
 
     const basePoints = vs30Data.map(point => {
       const [lon, lat, vs30] = point;
       const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
       
       let gm = calculateBaseGroundMotion(magnitude, dist, 10); 
-      
       let siteAmp = vs30 < 300 ? 1.5 : (vs30 < 500 ? 1.2 : 1.0);
       let pga = gm.pga * siteAmp;
       let pgv = gm.pgv * siteAmp;
@@ -181,10 +185,16 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
             finalPgv *= 2.5;
           }
 
-          const intensity = getCWAIntensity(finalPga, finalPgv);
+          let intensity = getCWAIntensity(finalPga, finalPgv);
+
+          // 🚨 強制削平：不讓公式算出來的震度超過物理天花板
+          if (INTENSITY_LEVELS.indexOf(intensity) > INTENSITY_LEVELS.indexOf(maxIntensityCeiling)) {
+            intensity = maxIntensityCeiling;
+          }
+
           const color = getIntensityColor(intensity);
           
-          if (color !== "#f1f5f9" && color !== "#ffffff" && color !== "#f8fafc") {
+          if (color !== "#ffffff" && color !== "#e5e5e5") {
             grid.push({ lon, lat, color });
           }
         }
