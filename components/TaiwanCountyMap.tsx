@@ -1,4 +1,5 @@
 // @ts-nocheck
+// 檔案：components/TaiwanCountyMap.tsx
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -95,6 +96,11 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
     if (matchKey) return getIntensityColor(intensities[matchKey]);
 
     if (intensities[modernCounty]) return getIntensityColor(intensities[modernCounty]);
+    
+    // 🚨 強化防護：加上拔除「縣市」結尾的匹配，確保地圖 100% 能對齊資料
+    const strippedCounty = modernCounty.replace(/[縣市]$/, "");
+    const matchCountyKey = Object.keys(intensities).find(k => k.replace(/[縣市]$/, "") === strippedCounty);
+    if (matchCountyKey) return getIntensityColor(intensities[matchCountyKey]);
 
     return "#e2e8f0"; 
   };
@@ -106,9 +112,14 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
     const basePoints = vs30Data.map(point => {
       const [lon, lat, vs30] = point;
       const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
-      let gm = calculateBaseGroundMotion(dist, magnitude, vs30);
-      let pga = gm.pga;
-      let pgv = gm.pgv;
+      
+      // 🚨 終極修復二：參數順序必須是 (magnitude, dist, depth)！原本把 dist 傳給了規模，造成計算無限大！
+      let gm = calculateBaseGroundMotion(magnitude, dist, 10); 
+      
+      // 場址效應放大 (土質越軟 vs30 越低，震波越大)
+      let siteAmp = vs30 < 300 ? 1.5 : (vs30 < 500 ? 1.2 : 1.0);
+      let pga = gm.pga * siteAmp;
+      let pgv = gm.pgv * siteAmp;
 
       const epicPt = [epicenterCoords[0], epicenterCoords[1]];
       const targetPt = [lon, lat];
@@ -169,10 +180,10 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
 
           // 🌟 盆地效應：PGV (速度/長週期) 對盆地深度的放大效應比 PGA 更劇烈！
           if (isPointInPolygon(targetPt, basins.taipei)) {
-            finalPga *= 1.8; 
+            finalPga *= 1.8;
             finalPgv *= 2.2; // 台北盆地極易誘發低頻共振
           } else if (isPointInPolygon(targetPt, basins.yilan)) {
-            finalPga *= 2.0; 
+            finalPga *= 2.0;
             finalPgv *= 2.5;
           }
 
@@ -180,7 +191,7 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           const intensity = getCWAIntensity(finalPga, finalPgv);
           const color = getIntensityColor(intensity);
           
-          if (color !== "#f1f5f9") {
+          if (color !== "#f1f5f9" && color !== "#ffffff") {
             grid.push({ lon, lat, color });
           }
         }
@@ -191,7 +202,7 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
 
   const heartbeatMaxR = Math.max(25, magnitude * 7);
 
-  if (!pureTownsTopo) return null; 
+  if (!pureTownsTopo) return null;
 
   return (
     <div className="w-full max-w-[340px] mx-auto drop-shadow-sm flex justify-center items-center overflow-hidden">
