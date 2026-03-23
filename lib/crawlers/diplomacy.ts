@@ -1,5 +1,15 @@
 // 檔案：lib/crawlers/diplomacy.ts
 
+// 🚨 輔助演算法：反跳脫 HTML，破解 Google News 的 XML 防護罩
+function unescapeHTML(str: string) {
+  return str
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'");
+}
+
 export async function fetchDiplomacyData() {
   try {
     const controller = new AbortController();
@@ -8,7 +18,8 @@ export async function fetchDiplomacyData() {
     const query = encodeURIComponent('"旅遊警示" ("陸委會" OR "外交部") ("中國" OR "大陸" OR "港澳" OR "台灣")');
     const url = `https://news.google.com/rss/search?q=${query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`;
     
-    const res = await fetch(url, { signal: controller.signal, next: { revalidate: 3600 } }); 
+    // 🚨 暴力破除快取：設定 cache: 'no-store'，強迫 Vercel 放棄舊的殘缺資料
+    const res = await fetch(url, { signal: controller.signal, cache: 'no-store' }); 
     if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
     
     const xmlString = await res.text();
@@ -17,6 +28,7 @@ export async function fetchDiplomacyData() {
     const rawAlerts: any[] = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     const descRegex = /<description>([\s\S]*?)<\/description>/;
+    const titleRegex = /<title>([\s\S]*?)<\/title>/;
     const pubDateRegex = /<pubDate>([\s\S]*?)<\/pubDate>/;
 
     let match;
@@ -25,23 +37,26 @@ export async function fetchDiplomacyData() {
       const descMatch = descRegex.exec(itemXml);
       let fullTitle = "";
 
-      // 🚨 零妥協萃取：潛入 description 挖出被 a 標籤包覆的「無截斷完整標題」
+      // 1. 優先從 description 萃取完整無截斷的標題
       if (descMatch) {
-        const aTagMatch = /<a[^>]*>([\s\S]*?)<\/a>/.exec(descMatch[1]);
+        const unescapedDesc = unescapeHTML(descMatch[1]); // 反跳脫
+        const aTagMatch = /<a[^>]*>([\s\S]*?)<\/a>/.exec(unescapedDesc);
         if (aTagMatch) {
-          // 清除 CDATA 與殘留的 HTML 標籤
           fullTitle = aTagMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").trim();
         }
       }
 
-      // 備案：如果 description 萃取失敗，才退回使用可能被截斷的 title
+      // 2. 備案：如果萃取失敗，才退回抓取 title
       if (!fullTitle) {
-        const titleMatch = /<title>([\s\S]*?)<\/title>/.exec(itemXml);
-        if (titleMatch) fullTitle = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim();
+        const titleMatch = titleRegex.exec(itemXml);
+        if (titleMatch) {
+          fullTitle = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim();
+        }
       }
 
-      // 清理：順手砍掉 " - 媒體名稱"，讓警示文字更純粹
+      // 🚨 雙重清洗：砍掉 " - 媒體名"，並且強制削掉尾巴的 ... 或 …
       fullTitle = fullTitle.replace(/\s*[-|｜_]\s*[^-|｜_]+$/, '');
+      fullTitle = fullTitle.replace(/[\.…]+$/, '').trim();
 
       if (fullTitle) {
         rawAlerts.push({
