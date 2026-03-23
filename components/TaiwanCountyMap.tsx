@@ -97,26 +97,23 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
 
     if (intensities[modernCounty]) return getIntensityColor(intensities[modernCounty]);
     
-    // 🚨 強化防護：加上拔除「縣市」結尾的匹配，確保地圖 100% 能對齊資料
     const strippedCounty = modernCounty.replace(/[縣市]$/, "");
     const matchCountyKey = Object.keys(intensities).find(k => k.replace(/[縣市]$/, "") === strippedCounty);
     if (matchCountyKey) return getIntensityColor(intensities[matchCountyKey]);
 
-    return "#e2e8f0"; 
+    // 🚨 終極修復：無震度區域的底色改為乾淨的微暖白 (#f8fafc)
+    return "#f8fafc"; 
   };
 
   const idwGrid = useMemo(() => {
     if (!epicenterCoords || vs30Data.length === 0 || reportStage !== "EEW") return [];
 
-    // 1. 計算基礎點 PGA 與 PGV
     const basePoints = vs30Data.map(point => {
       const [lon, lat, vs30] = point;
       const dist = calculateDistance(epicenterCoords[1], epicenterCoords[0], lat, lon);
       
-      // 🚨 終極修復二：參數順序必須是 (magnitude, dist, depth)！原本把 dist 傳給了規模，造成計算無限大！
       let gm = calculateBaseGroundMotion(magnitude, dist, 10); 
       
-      // 場址效應放大 (土質越軟 vs30 越低，震波越大)
       let siteAmp = vs30 < 300 ? 1.5 : (vs30 < 500 ? 1.2 : 1.0);
       let pga = gm.pga * siteAmp;
       let pgv = gm.pgv * siteAmp;
@@ -132,10 +129,9 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
         }
       }
 
-      // 山脈屏障攔截：加速度(短波)與速度(長波)皆削弱
       if (crossed) {
         pga *= 0.35; 
-        pgv *= 0.40; // PGV 繞射能力稍強，保留多一點點
+        pgv *= 0.40; 
       }
 
       return { lon, lat, pga, pgv };
@@ -145,7 +141,6 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
     const step = 0.03; 
     const searchRadiusSq = 0.2; 
 
-    // 2. 雙軌 IDW 空間內插
     for (let lon = 119.9; lon <= 122.1; lon += step) {
       for (let lat = 21.8; lat <= 25.4; lat += step) {
         let sumWeight = 0;
@@ -178,20 +173,18 @@ export default function TaiwanCountyMap({ reportStage, magnitude, intensities = 
           let finalPgv = sumValuePGV / sumWeight;
           const targetPt = [lon, lat];
 
-          // 🌟 盆地效應：PGV (速度/長週期) 對盆地深度的放大效應比 PGA 更劇烈！
           if (isPointInPolygon(targetPt, basins.taipei)) {
             finalPga *= 1.8;
-            finalPgv *= 2.2; // 台北盆地極易誘發低頻共振
+            finalPgv *= 2.2; 
           } else if (isPointInPolygon(targetPt, basins.yilan)) {
             finalPga *= 2.0;
             finalPgv *= 2.5;
           }
 
-          // 透過 CWA 雙軌標準取得最終震度顏色
           const intensity = getCWAIntensity(finalPga, finalPgv);
           const color = getIntensityColor(intensity);
           
-          if (color !== "#f1f5f9" && color !== "#ffffff") {
+          if (color !== "#f1f5f9" && color !== "#ffffff" && color !== "#f8fafc") {
             grid.push({ lon, lat, color });
           }
         }
