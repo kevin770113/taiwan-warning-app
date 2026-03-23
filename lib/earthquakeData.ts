@@ -10,14 +10,13 @@ export interface EarthquakeReport {
   lat: number;
   lon: number;
   epicenterCoords?: [number, number];
-  // 🚨 修正型別：從任何陣列 (any[]) 改為字串鍵值對的物件 (Record<string, string>)
   intensities?: Record<string, string>; 
 }
 
 // 🚀 1. 真實 API 連線與破甲
 export const fetchLatestEarthquake = async (): Promise<EarthquakeReport> => {
   try {
-    const timestamp = new Date().getTime(); // PWA 快取破甲
+    const timestamp = new Date().getTime(); 
     
     const response = await fetch(`/api/earthquake?t=${timestamp}`, {
       headers: {
@@ -39,7 +38,6 @@ export const fetchLatestEarthquake = async (): Promise<EarthquakeReport> => {
     return {
       ...data,
       epicenterCoords: [data.lon, data.lat],
-      // 🚨 修正預設值：從空陣列 [] 改為空物件 {}
       intensities: data.intensities || {} 
     };
   } catch (error) {
@@ -54,7 +52,6 @@ export const fetchLatestEarthquake = async (): Promise<EarthquakeReport> => {
       lat: 23.5,
       lon: 121.0,
       epicenterCoords: [121.0, 23.5],
-      // 🚨 修正預設值：從空陣列 [] 改為空物件 {}
       intensities: {} 
     };
   }
@@ -72,25 +69,26 @@ export function normalizeName(name: string): string {
   return name.replace(/臺/g, '台');
 }
 
+// 🚨 終極修復：全面替換為中央氣象署 (CWA) 官方標準色階
 export function getIntensityColor(intensity: string | number): string {
   const mapping: Record<string, string> = {
-    '0': '#ffffff',
-    '1': '#e0f7fa',
-    '2': '#b2ebf2',
-    '3': '#80deea',
-    '4': '#fff59d',
-    '5-': '#ffcc80',
-    '5+': '#ffb74d',
-    '6-': '#ef5350',
-    '6+': '#e53935',
-    '7': '#b71c1c'
+    '0': '#ffffff',   // 0級：無色/純白
+    '1': '#c8e6c9',   // 1級：淺綠色
+    '2': '#4caf50',   // 2級：綠色
+    '3': '#ffeb3b',   // 3級：黃色
+    '4': '#ff9800',   // 4級：橘色
+    '5-': '#8d6e63',  // 5弱：淺棕色
+    '5+': '#5d4037',  // 5強：深棕色
+    '6-': '#ef5350',  // 6弱：淺紅色
+    '6+': '#c62828',  // 6強：深紅色
+    '7': '#7b1fa2'    // 7級：紫紅色
   };
   return mapping[intensity.toString()] || '#ffffff';
 }
 
-// Haversine 距離公式 (計算兩點經緯度距離)
+// Haversine 距離公式
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // 地球半徑 (km)
+  const R = 6371; 
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -100,7 +98,7 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
   return R * c;
 }
 
-// NCREE 地震波衰減公式 (推估各地 PGA 與 PGV)
+// NCREE 地震波衰減公式
 export function calculateBaseGroundMotion(Mw: number, R: number, depth: number): { pga: number, pgv: number } {
   const Rrup = Math.sqrt(R * R + depth * depth);
   const pga = Math.pow(10, 0.5 * Mw - Math.log10(Rrup + 0.1) - 0.002 * Rrup) * 50; 
