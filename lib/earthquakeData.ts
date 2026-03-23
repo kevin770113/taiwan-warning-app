@@ -9,8 +9,9 @@ export interface EarthquakeReport {
   depth: number;
   lat: number;
   lon: number;
-  epicenterCoords?: [number, number]; // 地圖渲染必須的陣列格式
-  intensities?: any[]; // 相容前端 UI 顯示需求
+  epicenterCoords?: [number, number];
+  // 🚨 修正型別：從任何陣列 (any[]) 改為字串鍵值對的物件 (Record<string, string>)
+  intensities?: Record<string, string>; 
 }
 
 // 🚀 1. 真實 API 連線與破甲
@@ -18,7 +19,6 @@ export const fetchLatestEarthquake = async (): Promise<EarthquakeReport> => {
   try {
     const timestamp = new Date().getTime(); // PWA 快取破甲
     
-    // 呼叫我們寫好的 Vercel 閘門
     const response = await fetch(`/api/earthquake?t=${timestamp}`, {
       headers: {
         'Cache-Control': 'no-cache',
@@ -36,11 +36,11 @@ export const fetchLatestEarthquake = async (): Promise<EarthquakeReport> => {
        throw new Error("API 回傳資料格式錯誤");
     }
 
-    // 將後端傳來的 lat/lon 轉換為前端地圖需要的 epicenterCoords 格式
     return {
       ...data,
       epicenterCoords: [data.lon, data.lat],
-      intensities: data.intensities || []
+      // 🚨 修正預設值：從空陣列 [] 改為空物件 {}
+      intensities: data.intensities || {} 
     };
   } catch (error) {
     console.error("fetchLatestEarthquake 錯誤:", error);
@@ -54,13 +54,14 @@ export const fetchLatestEarthquake = async (): Promise<EarthquakeReport> => {
       lat: 23.5,
       lon: 121.0,
       epicenterCoords: [121.0, 23.5],
-      intensities: []
+      // 🚨 修正預設值：從空陣列 [] 改為空物件 {}
+      intensities: {} 
     };
   }
 };
 
 // ==========================================
-// 🚀 2. 核心物理演算法與地圖工具 (被誤刪的部分已補回)
+// 🚀 2. 核心物理演算法與地圖工具 
 // ==========================================
 
 export function normalizeCountyName(name: string): string {
@@ -101,14 +102,9 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
 
 // NCREE 地震波衰減公式 (推估各地 PGA 與 PGV)
 export function calculateBaseGroundMotion(Mw: number, R: number, depth: number): { pga: number, pgv: number } {
-  // 斷層距 (Rrup) 簡化估算
   const Rrup = Math.sqrt(R * R + depth * depth);
-  
-  // 簡易衰減模型估算 PGA (gal)
   const pga = Math.pow(10, 0.5 * Mw - Math.log10(Rrup + 0.1) - 0.002 * Rrup) * 50; 
-  // 簡易衰減模型估算 PGV (cm/s)
   const pgv = pga / 10;
-  
   return { pga, pgv };
 }
 
@@ -120,7 +116,6 @@ export function getCWAIntensity(pga: number, pgv: number): string {
   if (pga < 25) return '3';
   if (pga < 80) return '4';
   
-  // 震度 5 弱以上改用 PGV 判定
   if (pgv < 15) return '5-';
   if (pgv < 30) return '5+';
   if (pgv < 50) return '6-';
