@@ -69,19 +69,19 @@ export function normalizeName(name: string): string {
   return name.replace(/臺/g, '台');
 }
 
-// 🚨 終極修復：全面替換為中央氣象署 (CWA) 官方標準色階
+// 🚨 終極對齊：將色碼 100% 同步為前端 page.tsx 圖例設定的 Tailwind Hex 色碼
 export function getIntensityColor(intensity: string | number): string {
   const mapping: Record<string, string> = {
-    '0': '#ffffff',   // 0級：無色/純白
-    '1': '#c8e6c9',   // 1級：淺綠色
-    '2': '#4caf50',   // 2級：綠色
-    '3': '#ffeb3b',   // 3級：黃色
-    '4': '#ff9800',   // 4級：橘色
-    '5-': '#8d6e63',  // 5弱：淺棕色
-    '5+': '#5d4037',  // 5強：深棕色
-    '6-': '#ef5350',  // 6弱：淺紅色
-    '6+': '#c62828',  // 6強：深紅色
-    '7': '#7b1fa2'    // 7級：紫紅色
+    '0': '#ffffff',
+    '1': '#bbf7d0',   // 1級：淺綠 (對應 Tailwind green-200)
+    '2': '#4ade80',   // 2級：綠色 (對應 Tailwind green-400)
+    '3': '#facc15',   // 3級：黃色 (對應 Tailwind yellow-400)
+    '4': '#f97316',   // 4級：橘色 (對應 Tailwind orange-500)
+    '5-': '#ef4444',  // 5弱：紅色 (對應您圖例的設定)
+    '5+': '#b91c1c',  // 5強：深紅色 (對應您圖例的設定)
+    '6-': '#78350f',  // 6弱：咖啡色 (對應您圖例的設定)
+    '6+': '#451a03',  // 6強：深咖啡色 (對應您圖例的設定)
+    '7': '#312e81'    // 7級：深紫色
   };
   return mapping[intensity.toString()] || '#ffffff';
 }
