@@ -68,7 +68,8 @@ export default function IntelligencePage() {
           <div className="flex-1">
             {activeTab === "military" && (
               <div className="relative border-l-2 border-slate-200 ml-3 space-y-6 pb-4">
-                {data.military.map((item) => (
+                {/* 🚨 修復 Type Error: 加上 item: any */}
+                {data.military.map((item: any) => (
                   <div key={item.id} className="relative pl-6">
                     <span className="absolute -left-[9px] top-1 h-4 w-4 rounded-full bg-rose-100 border-2 border-white flex items-center justify-center">
                       <span className="h-2 w-2 rounded-full bg-rose-400"></span>
@@ -89,17 +90,17 @@ export default function IntelligencePage() {
 
             {activeTab === "diplomacy" && (
               <div className="space-y-3">
-                {data.diplomacy.map((item) => (
-                  <div key={item.id} className="bg-white p-4 rounded-2xl shadow-[0_2px_8px_rgb(0,0,0,0.02)] border border-slate-100 flex items-center justify-between">
-                    {/* 🚨 零妥協 UI：加上 flex-1 與 min-w-0 絕對防止 Flexbox 擠壓崩潰 */}
-                    <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0 pr-3">
-                      <span className="text-2xl drop-shadow-sm shrink-0">{item.flag}</span>
-                      <div className="truncate min-w-0 flex-1">
-                        <h3 className="font-bold text-slate-800 text-sm truncate">{item.country}</h3>
-                        <p className="text-[11px] text-slate-400 mt-0.5">{item.time} 更新</p>
+                {/* 🚨 修復 Type Error: 加上 item: any */}
+                {data.diplomacy.map((item: any) => (
+                  <div key={item.id} className="bg-white p-4 rounded-2xl shadow-[0_2px_8px_rgb(0,0,0,0.02)] border border-slate-100 flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <span className="text-2xl drop-shadow-sm shrink-0 mt-0.5">{item.flag}</span>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-slate-800 text-sm leading-snug break-words">{item.country}</h3>
+                        <p className="text-[11px] text-slate-400 mt-1.5">{item.time} 更新</p>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
+                    <div className="text-right shrink-0 mt-0.5">
                       <span className={`text-xs font-bold px-2.5 py-1 rounded-full border whitespace-nowrap inline-block ${
                         item.level === "critical" ? "bg-rose-50 text-rose-600 border-rose-200" :
                         item.level === "warning" ? "bg-orange-50 text-orange-600 border-orange-200" :
@@ -116,13 +117,13 @@ export default function IntelligencePage() {
 
             {activeTab === "finance" && (
               <div className="space-y-3">
-                {data.finance.map((item) => (
+                {/* 🚨 修復 Type Error: 加上 item: any */}
+                {data.finance.map((item: any) => (
                   <div key={item.id} className="bg-white p-4 rounded-2xl shadow-[0_2px_8px_rgb(0,0,0,0.02)] border border-slate-100 flex justify-between items-center">
                     <div>
                       <h3 className="font-bold text-slate-600 text-xs mb-1">{item.name}</h3>
                       <p className="text-2xl font-black text-slate-800">{item.value}</p>
                     </div>
-                    {/* 🚨 零妥協文化在地化：台股慣例，紅漲綠跌 */}
                     <div className={`text-right flex flex-col items-end ${item.isDown ? "text-emerald-500" : "text-rose-500"}`}>
                       <span className={`text-sm font-bold px-2 py-0.5 rounded flex items-center gap-1 ${item.isDown ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>
                         {item.isDown ? <TrendingDown size={14} /> : <TrendingDown size={14} className="rotate-180" />}
@@ -143,7 +144,8 @@ export default function IntelligencePage() {
 
             {activeTab === "news" && (
               <div className="space-y-4">
-                {data.news.map((item) => (
+                {/* 🚨 修復 Type Error: 加上 item: any */}
+                {data.news.map((item: any) => (
                   <div key={item.id} className="bg-white p-4 rounded-2xl shadow-[0_2px_8px_rgb(0,0,0,0.02)] border border-slate-100">
                     <div className="flex justify-between items-center mb-2">
                       <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">{item.source}</span>
@@ -169,7 +171,7 @@ export default function IntelligencePage() {
           <Info size={13} />
           <p className="text-[11px] font-medium tracking-wide">
             {activeTab === "military" && "資料來源：國防部 / Google 代理檢索"}
-            {activeTab === "diplomacy" && "資料來源：陸委會/外交部 / Google 代理檢索"}
+            {activeTab === "diplomacy" && "資料來源：陸委會/外交部 / Google 與 Bing 檢索"}
             {activeTab === "finance" && "資料來源：台灣證券交易所 / RTER 即時匯率 API"}
             {activeTab === "news" && "資料來源：Google News RSS / 全球媒體"}
           </p>
